@@ -1,0 +1,72 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Chart.yaml'
+      - 'values.yaml'
+      - 'templates/**'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Get chart version
+        id: chart
+        run: |
+          echo "version=$(grep '^version:' Chart.yaml | awk '{print $2}')" >> $GITHUB_OUTPUT
+          echo "name=$(grep '^name:' Chart.yaml | awk '{print $2}')" >> $GITHUB_OUTPUT
+
+      - name: Package chart
+        run: |
+          helm package .
+          mkdir -p .cr-release-packages
+          mv *.tgz .cr-release-packages/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.chart.outputs.version }}
+          name: ${{ steps.chart.outputs.name }}-${{ steps.chart.outputs.version }}
+          files: .cr-release-packages/*.tgz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update gh-pages index
+        run: |
+          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
+          git rm -rf . 2>/dev/null || true
+          mkdir -p charts
+          cp .cr-release-packages/*.tgz charts/ 2>/dev/null || true
+
+          # Merge with existing index if it exists
+          if [ -f index.yaml ]; then
+            helm repo index charts --url https://ileonelperea.github.io/wazuh-helm/charts --merge index.yaml
+            mv charts/index.yaml .
+          else
+            helm repo index charts --url https://ileonelperea.github.io/wazuh-helm/charts
+            mv charts/index.yaml .
+          fi
+
+          git add index.yaml charts/
+          git commit -m "Update Helm repo index for v${{ steps.chart.outputs.version }}"
+          git push origin gh-pages
