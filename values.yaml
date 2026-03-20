@@ -1,0 +1,186 @@
+# =============================================================================
+# Wazuh Helm Chart - Configuration Values
+# =============================================================================
+# Documentation: https://github.com/ileonelperea/wazuh-helm
+# =============================================================================
+
+# -- Global settings applied across all components
+global:
+  # -- Timezone for all containers (e.g., "UTC", "America/Mexico_City", "Europe/London")
+  timezone: "UTC"
+
+# =============================================================================
+# Security & Credentials
+# =============================================================================
+security:
+  # -- OpenSearch admin username
+  indexerUsername: "admin"
+  # -- OpenSearch admin password (CHANGE THIS in production)
+  indexerPassword: "SecurePassword123!"
+  # -- Bcrypt hash ($2a) of indexerPassword. Generate with:
+  #    docker run --rm -it wazuh/wazuh-indexer:4.14.4 bash -c "plugins/opensearch-security/tools/hash.sh -p 'YourPassword'"
+  indexerPasswordHash: "$2a$12$VcCDgh2NDk07JGN0rjGbM.G70e.MBZnOajZPBnZiqGe7f90ax1Pym"
+  # -- Wazuh API username
+  apiUsername: "wazuh-wui"
+  # -- Wazuh API password (CHANGE THIS in production)
+  apiPassword: "MyS3cr37P450r.*-"
+  # -- Dashboard/Kibanaserver user password
+  kibanaserverPassword: "kibanaserver"
+  # -- Bcrypt hash ($2a) of kibanaserverPassword
+  kibanaserverPasswordHash: "$2a$12$QVaK9qxjl3zDwcjmdXNCdOGGj8uw8Qukzb6398gUEgwmlT3.2gqDe"
+
+# =============================================================================
+# StorageClass
+# =============================================================================
+storageClass:
+  # -- Create a StorageClass resource (set to false if using an existing one)
+  create: true
+  # -- StorageClass name
+  name: gp3
+  # -- CSI provisioner. Use "ebs.csi.eks.amazonaws.com" for EKS Auto Mode
+  provisioner: ebs.csi.eks.amazonaws.com
+  # -- EBS volume type
+  type: gp3
+  # -- Enable EBS encryption
+  encrypted: true
+  # -- Reclaim policy for PVs
+  reclaimPolicy: Retain
+  # -- Volume binding mode
+  volumeBindingMode: WaitForFirstConsumer
+  # -- Allow PVC expansion
+  allowVolumeExpansion: true
+
+# =============================================================================
+# Indexer (Wazuh Indexer / OpenSearch)
+# =============================================================================
+indexer:
+  image:
+    repository: wazuh/wazuh-indexer
+    tag: "4.14.4"
+    pullPolicy: IfNotPresent
+  # -- Number of indexer replicas
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 3Gi
+  # -- JVM heap options (recommended: set Xms=Xmx, and ~50% of memory limit)
+  javaOpts: "-Xms1g -Xmx1g"
+  storage:
+    storageClass: gp3
+    # -- Indexer data volume size
+    size: 10Gi
+
+# =============================================================================
+# Manager (Wazuh Manager)
+# =============================================================================
+manager:
+  image:
+    repository: wazuh/wazuh-manager
+    tag: "4.14.4"
+    pullPolicy: IfNotPresent
+  # -- Number of manager replicas
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  storage:
+    storageClass: gp3
+    # -- Manager data volume size. 30Gi recommended due to vulnerability feed DB (~4G)
+    size: 30Gi
+  # -- Vulnerability feed update interval (default 60m, 12h reduces disk/CPU usage)
+  feedUpdateInterval: "12h"
+  # -- Enable logging ALL events (not just alerts) to archives
+  logallJson: true
+
+# =============================================================================
+# Dashboard (Wazuh Dashboard / OpenSearch Dashboards)
+# =============================================================================
+dashboard:
+  image:
+    repository: wazuh/wazuh-dashboard
+    tag: "4.14.4"
+    pullPolicy: IfNotPresent
+  # -- Number of dashboard replicas
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# =============================================================================
+# Agent (Wazuh Agent DaemonSet)
+# =============================================================================
+agent:
+  # -- Deploy Wazuh agents as a DaemonSet
+  enabled: true
+  image:
+    repository: wazuh/wazuh-agent
+    tag: "4.14.3"
+    pullPolicy: IfNotPresent
+  # -- Agent group for centralized configuration
+  group: "default"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  # -- Kubernetes namespaces to monitor container logs from.
+  # Empty list = monitor ALL namespaces.
+  # Example: ["my-app", "my-api"]
+  monitoredNamespaces: []
+  # -- SIEM-only mode: disable infrastructure monitoring modules that overlap
+  # with Prometheus/Grafana (hardware, network, ports, processes, etc.)
+  siemOnly: true
+
+# =============================================================================
+# S3 Archive Sync (Sidecar)
+# =============================================================================
+s3:
+  # -- Enable S3 sidecar for cold storage of Wazuh archives
+  enabled: false
+  # -- S3 bucket name for archive storage
+  bucket: ""
+  # -- AWS region for S3 bucket
+  region: "us-east-1"
+  # -- Sync interval in seconds
+  syncIntervalSeconds: 300
+  image:
+    repository: amazon/aws-cli
+    tag: "2.22.35"
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# =============================================================================
+# Cleanup CronJob
+# =============================================================================
+cleanup:
+  # -- Enable periodic cleanup of vd_updater temp files (recommended for 4.14.x)
+  enabled: true
+  # -- Cron schedule for cleanup job
+  schedule: "0 */2 * * *"
+  image:
+    repository: busybox
+    tag: "1.36"
+
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""

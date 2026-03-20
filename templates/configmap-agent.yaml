@@ -1,0 +1,39 @@
+{{- if .Values.agent.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wazuh.fullname" . }}-agent-config
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+    {{- include "wazuh.agent.selectorLabels" . | nindent 4 }}
+data:
+  ossec.conf: |
+    <ossec_config>
+      <client>
+        <server>
+          <address>{{ include "wazuh.fullname" . }}-manager</address>
+          <port>1514</port>
+          <protocol>tcp</protocol>
+        </server>
+        <enrollment>
+          <enabled>yes</enabled>
+          <manager_address>{{ include "wazuh.fullname" . }}-manager</manager_address>
+          <port>1515</port>
+          <agent_name>NODE_NAME_PLACEHOLDER</agent_name>
+          <groups>{{ .Values.agent.group }}</groups>
+        </enrollment>
+        <notify_time>10</notify_time>
+        <time-reconnect>60</time-reconnect>
+      </client>
+
+      <client_buffer>
+        <disabled>no</disabled>
+        <queue_size>5000</queue_size>
+        <events_per_second>500</events_per_second>
+      </client_buffer>
+
+      <logging>
+        <log_format>plain</log_format>
+      </logging>
+    </ossec_config>
+{{- end }}

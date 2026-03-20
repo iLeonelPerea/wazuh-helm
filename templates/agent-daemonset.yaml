@@ -1,0 +1,106 @@
+{{- if .Values.agent.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "wazuh.fullname" . }}-agent
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+    {{- include "wazuh.agent.selectorLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "wazuh.agent.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "wazuh.labels" . | nindent 8 }}
+        {{- include "wazuh.agent.selectorLabels" . | nindent 8 }}
+    spec:
+      hostPID: true
+      serviceAccountName: {{ include "wazuh.fullname" . }}-agent
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      initContainers:
+        - name: resolve-manager
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Resolving {{ include "wazuh.fullname" . }}-manager-agents..."
+              MANAGER_IP=""
+              for i in $(seq 1 30); do
+                MANAGER_IP=$(nslookup {{ include "wazuh.fullname" . }}-manager-agents.{{ .Release.Namespace }}.svc.cluster.local 2>/dev/null | tail -2 | grep Address | awk '{print $3}')
+                [ -z "$MANAGER_IP" ] && MANAGER_IP=$(nslookup {{ include "wazuh.fullname" . }}-manager-agents.{{ .Release.Namespace }}.svc.cluster.local 2>/dev/null | grep -A1 "Name:" | grep Address | awk '{print $2}')
+                if [ -n "$MANAGER_IP" ]; then break; fi
+                echo "Attempt $i: DNS not ready..."
+                sleep 2
+              done
+              if [ -z "$MANAGER_IP" ]; then
+                echo "ERROR: Could not resolve manager IP"
+                exit 1
+              fi
+              echo "$MANAGER_IP" > /shared/manager-ip
+              echo "Resolved manager IP: $MANAGER_IP"
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      containers:
+        - name: wazuh-agent
+          image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}"
+          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+          securityContext:
+            privileged: true
+          command:
+            - /bin/bash
+            - -c
+            - |
+              MANAGER_IP=$(cat /shared/manager-ip)
+              export WAZUH_MANAGER_SERVER="$MANAGER_IP"
+              export WAZUH_REGISTRATION_SERVER="$MANAGER_IP"
+              echo "Starting agent with manager IP: $MANAGER_IP"
+              exec /init
+          env:
+            - name: WAZUH_MANAGER_PORT
+              value: "1514"
+            - name: WAZUH_REGISTRATION_PORT
+              value: "1515"
+            - name: WAZUH_AGENT_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: WAZUH_AGENT_GROUPS
+              value: {{ .Values.agent.group | quote }}
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+              readOnly: true
+            - name: host-var-log
+              mountPath: /var/log
+              readOnly: true
+            - name: host-etc
+              mountPath: /host/etc
+              readOnly: true
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
+      volumes:
+        - name: shared
+          emptyDir: {}
+        - name: host-var-log
+          hostPath:
+            path: /var/log
+        - name: host-etc
+          hostPath:
+            path: /etc
+        - name: host-proc
+          hostPath:
+            path: /proc
+{{- end }}

@@ -1,0 +1,195 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "wazuh.fullname" . }}-manager
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+    {{- include "wazuh.manager.selectorLabels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "wazuh.fullname" . }}-manager
+  replicas: {{ .Values.manager.replicas }}
+  selector:
+    matchLabels:
+      {{- include "wazuh.manager.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wazuh.labels" . | nindent 8 }}
+        {{- include "wazuh.manager.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: wazuh-manager
+      securityContext:
+        fsGroup: 101
+      containers:
+        - name: wazuh-manager
+          image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
+          imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
+          securityContext:
+            capabilities:
+              add: ["SYS_CHROOT"]
+          ports:
+            - name: agents-events
+              containerPort: 1514
+              protocol: TCP
+            - name: agents-auth
+              containerPort: 1515
+              protocol: TCP
+            - name: cluster
+              containerPort: 1516
+              protocol: TCP
+            - name: api
+              containerPort: 55000
+              protocol: TCP
+          env:
+            - name: TZ
+              value: {{ .Values.global.timezone | quote }}
+            - name: INDEXER_URL
+              value: "https://{{ include "wazuh.fullname" . }}-indexer:9200"
+            - name: INDEXER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-credentials
+                  key: indexer-username
+            - name: INDEXER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-credentials
+                  key: indexer-password
+            - name: FILEBEAT_SSL_VERIFICATION_MODE
+              value: "certificate"
+            - name: SSL_CERTIFICATE_AUTHORITIES
+              value: "/etc/ssl/root-ca.pem"
+            - name: SSL_CERTIFICATE
+              value: "/etc/ssl/filebeat.pem"
+            - name: SSL_KEY
+              value: "/etc/ssl/filebeat-key.pem"
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-credentials
+                  key: api-username
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-credentials
+                  key: api-password
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    # Wait for shared directory to exist (created by manager init)
+                    for i in $(seq 1 30); do
+                      [ -d /var/ossec/etc/shared/default ] && break
+                      sleep 2
+                    done
+                    # Copy SIEM-only agent.conf from ConfigMap
+                    if [ -f /tmp/shared-config/agent.conf ]; then
+                      cp /tmp/shared-config/agent.conf /var/ossec/etc/shared/default/agent.conf
+                      chown wazuh:wazuh /var/ossec/etc/shared/default/agent.conf 2>/dev/null || true
+                    fi
+                    # Apply ossec.conf customizations (persisted on PVC)
+                    CONF=/var/ossec/etc/ossec.conf
+                    {{- if ne .Values.manager.feedUpdateInterval "60m" }}
+                    # feed-update-interval: {{ .Values.manager.feedUpdateInterval }} instead of default 60m
+                    sed -i 's|<feed-update-interval>60m</feed-update-interval>|<feed-update-interval>{{ .Values.manager.feedUpdateInterval }}</feed-update-interval>|' $CONF 2>/dev/null || true
+                    {{- end }}
+                    {{- if .Values.manager.logallJson }}
+                    # logall_json: yes for archives
+                    sed -i 's|<logall_json>no</logall_json>|<logall_json>yes</logall_json>|' $CONF 2>/dev/null || true
+                    {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: agents-events
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: agents-events
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.manager.resources | nindent 12 }}
+          volumeMounts:
+            - name: wazuh-manager-data
+              mountPath: /var/ossec/data
+            - name: wazuh-manager-data
+              mountPath: /var/ossec/logs
+              subPath: logs
+            - name: wazuh-manager-data
+              mountPath: /var/ossec/queue
+              subPath: queue
+            - name: wazuh-manager-data
+              mountPath: /var/ossec/etc
+              subPath: etc
+            - name: filebeat-certs
+              mountPath: /etc/ssl/root-ca.pem
+              subPath: root-ca.pem
+              readOnly: true
+            - name: filebeat-certs
+              mountPath: /etc/ssl/filebeat.pem
+              subPath: filebeat.pem
+              readOnly: true
+            - name: filebeat-certs
+              mountPath: /etc/ssl/filebeat-key.pem
+              subPath: filebeat-key.pem
+              readOnly: true
+            - name: shared-config
+              mountPath: /tmp/shared-config
+              readOnly: true
+            - name: manager-config
+              mountPath: /etc/filebeat/filebeat.yml
+              subPath: filebeat.yml
+              readOnly: true
+        {{- if .Values.s3.enabled }}
+        - name: s3-sync
+          image: "{{ .Values.s3.image.repository }}:{{ .Values.s3.image.tag }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting S3 archive sync..."
+              while true; do
+                if [ -d /var/ossec/logs/archives ]; then
+                  aws s3 sync /var/ossec/logs/archives/ s3://{{ .Values.s3.bucket }}/archives/ \
+                    --exclude "*.tmp" --exclude "*.lock" \
+                    --region {{ .Values.s3.region }} --quiet 2>/dev/null && \
+                    echo "$(date) - Sync completed" || \
+                    echo "$(date) - Sync failed"
+                fi
+                sleep {{ .Values.s3.syncIntervalSeconds }}
+              done
+          env:
+            - name: TZ
+              value: {{ .Values.global.timezone | quote }}
+          resources:
+            {{- toYaml .Values.s3.resources | nindent 12 }}
+          volumeMounts:
+            - name: wazuh-manager-data
+              mountPath: /var/ossec/logs
+              subPath: logs
+              readOnly: true
+        {{- end }}
+      volumes:
+        - name: filebeat-certs
+          secret:
+            secretName: {{ include "wazuh.fullname" . }}-filebeat-certs
+        - name: shared-config
+          configMap:
+            name: {{ include "wazuh.fullname" . }}-manager-shared
+        - name: manager-config
+          configMap:
+            name: {{ include "wazuh.fullname" . }}-manager-config
+  volumeClaimTemplates:
+    - metadata:
+        name: wazuh-manager-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.manager.storage.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.manager.storage.size }}

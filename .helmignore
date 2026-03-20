@@ -1,0 +1,21 @@
+# Patterns to ignore when building packages.
+.git
+.gitignore
+.DS_Store
+*.swp
+*.bak
+*.tmp
+*.orig
+# IDE
+.idea/
+.vscode/
+*.iml
+# CI
+.github/
+.gitlab-ci.yml
+.circleci/
+# Documentation source
+docs/
+# Testing
+tests/
+ci/

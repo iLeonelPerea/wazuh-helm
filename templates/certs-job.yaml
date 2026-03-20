@@ -1,0 +1,126 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "wazuh.fullname" . }}-certs-generator
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "wazuh.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "wazuh.fullname" . }}-certs-generator
+      restartPolicy: OnFailure
+      containers:
+        - name: generate-certs
+          image: bitnamilegacy/kubectl:1.32
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              CERTS_DIR="/tmp/certs"
+              mkdir -p "$CERTS_DIR"
+              FULLNAME="{{ include "wazuh.fullname" . }}"
+              NAMESPACE="{{ .Release.Namespace }}"
+
+              # Check if secrets already exist
+              if kubectl get secret "${FULLNAME}-indexer-certs" -n "$NAMESPACE" > /dev/null 2>&1; then
+                echo "Certificates already exist, skipping generation."
+                exit 0
+              fi
+
+              echo "=== Generating Root CA ==="
+              openssl genrsa -out "$CERTS_DIR/root-ca-key.pem" 2048
+              openssl req -new -x509 -sha256 -key "$CERTS_DIR/root-ca-key.pem" \
+                -out "$CERTS_DIR/root-ca.pem" -days 3650 \
+                -subj "/C=US/L=California/O=Wazuh/CN=Wazuh Root CA"
+
+              generate_cert() {
+                local name=$1
+                local cn=$2
+                local san=$3
+
+                echo "=== Generating cert: $name (CN=$cn) ==="
+                openssl genrsa -out "$CERTS_DIR/${name}-key.pem" 2048
+
+                # Create CSR config with SAN
+                cat > "$CERTS_DIR/${name}.cnf" <<CNFEOF
+              [req]
+              distinguished_name = req_dn
+              req_extensions = v3_req
+              prompt = no
+
+              [req_dn]
+              C = US
+              L = California
+              O = Wazuh
+              CN = ${cn}
+
+              [v3_req]
+              subjectAltName = ${san}
+              CNFEOF
+
+                # Create ext config for signing
+                cat > "$CERTS_DIR/${name}-ext.cnf" <<EXTEOF
+              subjectAltName = ${san}
+              EXTEOF
+
+                openssl req -new -key "$CERTS_DIR/${name}-key.pem" \
+                  -out "$CERTS_DIR/${name}.csr" \
+                  -config "$CERTS_DIR/${name}.cnf"
+
+                openssl x509 -req -in "$CERTS_DIR/${name}.csr" \
+                  -CA "$CERTS_DIR/root-ca.pem" \
+                  -CAkey "$CERTS_DIR/root-ca-key.pem" \
+                  -CAcreateserial \
+                  -out "$CERTS_DIR/${name}.pem" \
+                  -days 1825 -sha256 \
+                  -extfile "$CERTS_DIR/${name}-ext.cnf"
+              }
+
+              # Generate certs for each component
+              generate_cert "admin" "admin" \
+                "DNS:admin"
+
+              generate_cert "indexer" "${FULLNAME}-indexer" \
+                "DNS:${FULLNAME}-indexer,DNS:${FULLNAME}-indexer.${NAMESPACE}.svc,DNS:${FULLNAME}-indexer.${NAMESPACE}.svc.cluster.local,DNS:localhost,IP:127.0.0.1"
+
+              generate_cert "dashboard" "${FULLNAME}-dashboard" \
+                "DNS:${FULLNAME}-dashboard,DNS:${FULLNAME}-dashboard.${NAMESPACE}.svc,DNS:${FULLNAME}-dashboard.${NAMESPACE}.svc.cluster.local,DNS:localhost,IP:127.0.0.1"
+
+              generate_cert "filebeat" "${FULLNAME}-manager" \
+                "DNS:${FULLNAME}-manager,DNS:${FULLNAME}-manager.${NAMESPACE}.svc,DNS:${FULLNAME}-manager.${NAMESPACE}.svc.cluster.local,DNS:localhost,IP:127.0.0.1"
+
+              echo "=== Creating Kubernetes Secrets ==="
+
+              # Indexer certs
+              kubectl create secret generic "${FULLNAME}-indexer-certs" \
+                -n "$NAMESPACE" \
+                --from-file=root-ca.pem="$CERTS_DIR/root-ca.pem" \
+                --from-file=indexer.pem="$CERTS_DIR/indexer.pem" \
+                --from-file=indexer-key.pem="$CERTS_DIR/indexer-key.pem" \
+                --from-file=admin.pem="$CERTS_DIR/admin.pem" \
+                --from-file=admin-key.pem="$CERTS_DIR/admin-key.pem"
+
+              # Dashboard certs
+              kubectl create secret generic "${FULLNAME}-dashboard-certs" \
+                -n "$NAMESPACE" \
+                --from-file=root-ca.pem="$CERTS_DIR/root-ca.pem" \
+                --from-file=dashboard.pem="$CERTS_DIR/dashboard.pem" \
+                --from-file=dashboard-key.pem="$CERTS_DIR/dashboard-key.pem"
+
+              # Filebeat/Manager certs
+              kubectl create secret generic "${FULLNAME}-filebeat-certs" \
+                -n "$NAMESPACE" \
+                --from-file=root-ca.pem="$CERTS_DIR/root-ca.pem" \
+                --from-file=filebeat.pem="$CERTS_DIR/filebeat.pem" \
+                --from-file=filebeat-key.pem="$CERTS_DIR/filebeat-key.pem"
+
+              echo "=== All certificates generated and stored ==="
