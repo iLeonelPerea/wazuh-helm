@@ -1,0 +1,212 @@
+{{- if .Values.networkPolicy.enabled }}
+# =============================================================================
+# Agent NetworkPolicy - restrict egress to manager + DNS only
+# =============================================================================
+{{- if .Values.agent.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wazuh.fullname" . }}-agent
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+    {{- include "wazuh.agent.selectorLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wazuh.agent.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow agent -> manager (events + enrollment)
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.manager.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 1514
+        - protocol: TCP
+          port: 1515
+    # Allow DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- with .Values.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+---
+# =============================================================================
+# Manager NetworkPolicy - ingress from agents, egress to indexer + DNS
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wazuh.fullname" . }}-manager
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+    {{- include "wazuh.manager.selectorLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wazuh.manager.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow agents -> manager (events + enrollment)
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.agent.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 1514
+        - protocol: TCP
+          port: 1515
+    # Allow dashboard -> manager API
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.dashboard.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 55000
+    # Allow manager cluster communication
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.manager.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 1516
+  egress:
+    # Allow manager -> indexer
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.indexer.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow manager cluster communication
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.manager.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 1516
+---
+# =============================================================================
+# Indexer NetworkPolicy - ingress from manager + dashboard only
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wazuh.fullname" . }}-indexer
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+    {{- include "wazuh.indexer.selectorLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wazuh.indexer.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow manager -> indexer
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.manager.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow dashboard -> indexer
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.dashboard.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow indexer cluster communication
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.indexer.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9300
+  egress:
+    # Allow DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow indexer cluster communication
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.indexer.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9300
+---
+# =============================================================================
+# Dashboard NetworkPolicy - ingress on 5601, egress to indexer + manager API
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wazuh.fullname" . }}-dashboard
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+    {{- include "wazuh.dashboard.selectorLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wazuh.dashboard.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow external access to dashboard
+    - ports:
+        - protocol: TCP
+          port: 5601
+  egress:
+    # Allow dashboard -> indexer
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.indexer.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow dashboard -> manager API
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "wazuh.manager.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 55000
+    # Allow DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

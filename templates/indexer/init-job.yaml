@@ -63,8 +63,8 @@ spec:
             - name: INDEXER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: indexer-password
+                  name: {{ include "wazuh.indexerSecretName" . }}
+                  key: password
           volumeMounts:
             - name: certs
               mountPath: /certs

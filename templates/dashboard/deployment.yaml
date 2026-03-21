@@ -15,7 +15,21 @@ spec:
       labels:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.dashboard.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/dashboard/configmap.yaml") . | sha256sum }}
     spec:
+      {{- with .Values.dashboard.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: wazuh-dashboard
           image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
@@ -42,13 +56,13 @@ spec:
             - name: API_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: api-username
+                  name: {{ include "wazuh.apiSecretName" . }}
+                  key: username
             - name: API_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: api-password
+                  name: {{ include "wazuh.apiSecretName" . }}
+                  key: password
             - name: SERVER_SSL_ENABLED
               value: "false"
           resources:

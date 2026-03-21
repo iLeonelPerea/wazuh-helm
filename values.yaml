@@ -28,6 +28,15 @@ security:
   kibanaserverPassword: "kibanaserver"
   # -- Bcrypt hash ($2a) of kibanaserverPassword
   kibanaserverPasswordHash: "$2a$12$QVaK9qxjl3zDwcjmdXNCdOGGj8uw8Qukzb6398gUEgwmlT3.2gqDe"
+  # -- Use existing secrets instead of chart-created ones
+  # When set, the chart will NOT create the corresponding Secret resource
+  existingSecrets:
+    # -- Name of existing Secret containing 'username' and 'password' keys for indexer
+    indexer: ""
+    # -- Name of existing Secret containing 'username' and 'password' keys for API
+    api: ""
+    # -- Name of existing Secret containing 'password' key for dashboard
+    dashboard: ""
 
 # =============================================================================
 # StorageClass
@@ -73,6 +82,12 @@ indexer:
     storageClass: gp3
     # -- Indexer data volume size
     size: 10Gi
+  # -- Node selector for indexer pods
+  nodeSelector: {}
+  # -- Tolerations for indexer pods
+  tolerations: []
+  # -- Affinity rules for indexer pods
+  affinity: {}
 
 # =============================================================================
 # Manager (Wazuh Manager)
@@ -99,6 +114,26 @@ manager:
   feedUpdateInterval: "12h"
   # -- Enable logging ALL events (not just alerts) to archives
   logallJson: true
+  # -- Days to keep rotated log files on disk (S3/Indexer retains full history)
+  logRetentionDays: 7
+  # -- Custom detection rules for monitored namespaces
+  customRules:
+    # -- Enable custom detection rules (5xx, 401, 403, 429, exceptions, DB errors, correlations)
+    enabled: true
+    # -- Extra custom rules. Each entry generates a rule matching monitoredNamespaces.
+    # id: rule ID (100008-100009 range), level: severity 1-15, pattern: regex, group: rule group
+    extraPatterns:
+      - id: "100008"
+        level: "10"
+        pattern: "Pomelo.*error|Pomelo.*fail|Failed to refresh Pomelo|Pomelo.*timeout"
+        description: "Pomelo integration error"
+        group: "integration_error,pomelo"
+  # -- Node selector for manager pods
+  nodeSelector: {}
+  # -- Tolerations for manager pods
+  tolerations: []
+  # -- Affinity rules for manager pods
+  affinity: {}
 
 # =============================================================================
 # Dashboard (Wazuh Dashboard / OpenSearch Dashboards)
@@ -117,6 +152,28 @@ dashboard:
     limits:
       cpu: 500m
       memory: 1Gi
+  # -- Ingress configuration for dashboard access without port-forward
+  ingress:
+    enabled: false
+    # -- Ingress class name (e.g., "nginx", "alb")
+    ingressClassName: ""
+    # -- Hostname for the dashboard
+    host: "wazuh.example.com"
+    # -- Additional ingress annotations
+    annotations: {}
+    # -- TLS configuration
+    # Example:
+    #   tls:
+    #     - secretName: wazuh-dashboard-tls
+    #       hosts:
+    #         - wazuh.example.com
+    tls: []
+  # -- Node selector for dashboard pods
+  nodeSelector: {}
+  # -- Tolerations for dashboard pods
+  tolerations: []
+  # -- Affinity rules for dashboard pods
+  affinity: {}
 
 # =============================================================================
 # Agent (Wazuh Agent DaemonSet)
@@ -144,6 +201,12 @@ agent:
   # -- SIEM-only mode: disable infrastructure monitoring modules that overlap
   # with Prometheus/Grafana (hardware, network, ports, processes, etc.)
   siemOnly: true
+  # -- Node selector for agent pods
+  nodeSelector: {}
+  # -- Extra tolerations for agent pods (NoSchedule is always tolerated)
+  tolerations: []
+  # -- Affinity rules for agent pods
+  affinity: {}
 
 # =============================================================================
 # S3 Archive Sync (Sidecar)
@@ -179,6 +242,15 @@ cleanup:
   image:
     repository: busybox
     tag: "1.36"
+
+# =============================================================================
+# NetworkPolicy
+# =============================================================================
+networkPolicy:
+  # -- Enable NetworkPolicy resources for pod-level traffic control
+  enabled: false
+  # -- Additional egress rules for agents (e.g., to reach external APIs)
+  extraEgress: []
 
 # -- Override the chart name
 nameOverride: ""

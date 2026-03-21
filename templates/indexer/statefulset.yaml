@@ -16,9 +16,24 @@ spec:
       labels:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.indexer.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/indexer/configmap.yaml") . | sha256sum }}
+        checksum/security: {{ include (print $.Template.BasePath "/indexer/configmap-security.yaml") . | sha256sum }}
     spec:
       securityContext:
         fsGroup: 1000
+      {{- with .Values.indexer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         - name: volume-permissions
           image: busybox:1.36
@@ -45,13 +60,13 @@ spec:
             - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: indexer-password
+                  name: {{ include "wazuh.indexerSecretName" . }}
+                  key: password
             - name: INDEXER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: indexer-password
+                  name: {{ include "wazuh.indexerSecretName" . }}
+                  key: password
           startupProbe:
             tcpSocket:
               port: indexer-rest
@@ -96,7 +111,7 @@ spec:
             secretName: {{ include "wazuh.fullname" . }}-indexer-certs
         - name: credentials
           secret:
-            secretName: {{ include "wazuh.fullname" . }}-credentials
+            secretName: {{ include "wazuh.indexerSecretName" . }}
         - name: indexer-security
           configMap:
             name: {{ include "wazuh.fullname" . }}-indexer-security

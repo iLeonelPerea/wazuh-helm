@@ -16,10 +16,24 @@ spec:
       labels:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.manager.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- include "wazuh.checksumAnnotations" . | nindent 8 }}
     spec:
       serviceAccountName: wazuh-manager
       securityContext:
         fsGroup: 101
+      {{- with .Values.manager.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.manager.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.manager.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: wazuh-manager
           image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
@@ -48,13 +62,13 @@ spec:
             - name: INDEXER_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: indexer-username
+                  name: {{ include "wazuh.indexerSecretName" . }}
+                  key: username
             - name: INDEXER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: indexer-password
+                  name: {{ include "wazuh.indexerSecretName" . }}
+                  key: password
             - name: FILEBEAT_SSL_VERIFICATION_MODE
               value: "certificate"
             - name: SSL_CERTIFICATE_AUTHORITIES
@@ -66,13 +80,13 @@ spec:
             - name: API_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: api-username
+                  name: {{ include "wazuh.apiSecretName" . }}
+                  key: username
             - name: API_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "wazuh.fullname" . }}-credentials
-                  key: api-password
+                  name: {{ include "wazuh.apiSecretName" . }}
+                  key: password
           lifecycle:
             postStart:
               exec:
@@ -100,6 +114,16 @@ spec:
                     # logall_json: yes for archives
                     sed -i 's|<logall_json>no</logall_json>|<logall_json>yes</logall_json>|' $CONF 2>/dev/null || true
                     {{- end }}
+                    # Copy local_internal_options.conf for log rotation settings
+                    if [ -f /tmp/manager-config/local_internal_options.conf ]; then
+                      cp /tmp/manager-config/local_internal_options.conf /var/ossec/etc/local_internal_options.conf
+                      chown wazuh:wazuh /var/ossec/etc/local_internal_options.conf 2>/dev/null || true
+                    fi
+                    # Copy custom detection rules
+                    if [ -f /tmp/manager-config/local_rules.xml ]; then
+                      cp /tmp/manager-config/local_rules.xml /var/ossec/etc/rules/local_rules.xml
+                      chown wazuh:wazuh /var/ossec/etc/rules/local_rules.xml 2>/dev/null || true
+                    fi
           readinessProbe:
             tcpSocket:
               port: agents-events
@@ -144,6 +168,9 @@ spec:
             - name: manager-config
               mountPath: /etc/filebeat/filebeat.yml
               subPath: filebeat.yml
+              readOnly: true
+            - name: manager-config
+              mountPath: /tmp/manager-config
               readOnly: true
         {{- if .Values.s3.enabled }}
         - name: s3-sync
