@@ -4,46 +4,21 @@ Production-ready [Wazuh](https://wazuh.com/) SIEM deployment for Kubernetes, opt
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Kubernetes Cluster                     │
-│                                                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │   Indexer     │  │   Manager    │  │  Dashboard   │   │
-│  │ (OpenSearch)  │  │  + Filebeat  │  │  (UI :5601)  │   │
-│  │  :9200/:9300  │  │  :1514/1515  │  │              │   │
-│  │  StatefulSet  │  │  StatefulSet │  │  Deployment  │   │
-│  │  PVC (gp3)   │  │  PVC (gp3)   │  │              │   │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────┘   │
-│         │                  │                              │
-│         │     ┌────────────┤                              │
-│         │     │            │                              │
-│  ┌──────┴─────┴──┐  ┌─────┴────────┐                    │
-│  │  TLS Certs    │  │ Agent        │                    │
-│  │  (pre-install │  │ (DaemonSet)  │                    │
-│  │   hook)       │  │ per node     │                    │
-│  └───────────────┘  └──────────────┘                    │
-│                                                           │
-│  Optional:                                                │
-│  ┌──────────────┐  ┌──────────────┐                      │
-│  │ S3 Sidecar   │  │ Cleanup      │                      │
-│  │ (aws-cli)    │  │ CronJob      │                      │
-│  │ cold storage │  │ vd_updater   │                      │
-│  └──────────────┘  └──────────────┘                      │
-└─────────────────────────────────────────────────────────┘
-```
+![Wazuh Architecture](docs/architecture.svg)
 
 ## Components
 
 | Component | Type | Description |
 |-----------|------|-------------|
-| **Indexer** | StatefulSet | Wazuh Indexer (OpenSearch) for alert/archive storage |
-| **Manager** | StatefulSet | Wazuh Manager with Filebeat for log processing |
+| **Indexer** | StatefulSet (3 replicas) | OpenSearch cluster with quorum for alert/archive storage |
+| **Manager** | StatefulSet (master + worker) | Wazuh Manager cluster with Filebeat for log processing |
 | **Dashboard** | Deployment | Wazuh Dashboard (OpenSearch Dashboards) web UI |
 | **Agent** | DaemonSet | Wazuh Agent on every node for log collection |
-| **Certs Generator** | Job (pre-install) | Auto-generates TLS certificates on first install |
+| **Certs Generator** | Job (pre-install) | Auto-generates TLS certificates |
+| **Security Init** | Init container (indexer) | Configures users, passwords, and roles automatically |
 | **S3 Sync** | Sidecar (optional) | Syncs archives to S3 for cold storage |
-| **Cleanup** | CronJob (optional) | Cleans vd_updater temp files (4.14.x bug workaround) |
+| **Cert Rotation** | CronJob (optional) | Rotates TLS certificates before expiration |
+| **Cleanup** | CronJob (optional) | Cleans vd_updater temp files (4.14.x workaround) |
 
 ## Quick Start
 
@@ -56,14 +31,16 @@ Production-ready [Wazuh](https://wazuh.com/) SIEM deployment for Kubernetes, opt
 ### Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/ileonelperea/wazuh-helm.git
-cd wazuh-helm
+# Add the repo
+helm repo add wazuh-helm https://ileonelperea.github.io/wazuh-helm
+helm repo update
 
 # Install with default values
-helm install wazuh . -n wazuh --create-namespace
+helm install wazuh wazuh-helm/wazuh -n wazuh --create-namespace
 
-# Or install with custom values
+# Or from source with custom values
+git clone https://github.com/ileonelperea/wazuh-helm.git
+cd wazuh-helm
 helm install wazuh . -n wazuh --create-namespace -f my-values.yaml
 ```
 
@@ -75,19 +52,18 @@ global:
   timezone: "America/Mexico_City"
 
 security:
-  indexerPassword: "YourSecurePassword123!"
-  indexerPasswordHash: "$2a$12$..."  # bcrypt hash of your password
-  apiPassword: "YourAPIPassword!"
+  adminPassword: "YourSecurePassword123!"
 ```
+
+That's it. Internal passwords (kibanaserver, filebeat, API) are **derived automatically** from `adminPassword`. No hashes, no manual setup.
 
 ### Access the Dashboard
 
 ```bash
-# Port-forward the dashboard
 kubectl port-forward svc/wazuh-dashboard 5601:5601 -n wazuh
 
-# Open in browser: http://localhost:5601
-# Login: admin / <your indexerPassword>
+# Open: http://localhost:5601
+# Login: admin / <your adminPassword>
 ```
 
 ## Configuration
@@ -102,37 +78,47 @@ kubectl port-forward svc/wazuh-dashboard 5601:5601 -n wazuh
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `security.indexerUsername` | OpenSearch admin username | `"admin"` |
-| `security.indexerPassword` | OpenSearch admin password | `"SecurePassword123!"` |
-| `security.indexerPasswordHash` | Bcrypt hash ($2a) of admin password | (default hash) |
-| `security.apiUsername` | Wazuh API username | `"wazuh-wui"` |
-| `security.apiPassword` | Wazuh API password | `"MyS3cr37P450r.*-"` |
-| `security.kibanaserverPassword` | Dashboard internal user password | `"kibanaserver"` |
-| `security.kibanaserverPasswordHash` | Bcrypt hash of kibanaserver password | (default hash) |
+| `security.adminPassword` | Admin password (the only one you need to set) | `"SecurePassword123!"` |
+| `security.existingSecrets.indexer` | Use existing Secret for indexer credentials | `""` |
+| `security.existingSecrets.api` | Use existing Secret for API credentials | `""` |
+| `security.existingSecrets.dashboard` | Use existing Secret for dashboard credentials | `""` |
+| `security.existingSecrets.filebeat` | Use existing Secret for filebeat credentials | `""` |
 
-> **Generate a bcrypt hash:**
-> ```bash
-> docker run --rm -it wazuh/wazuh-indexer:4.14.4 bash -c \
->   "plugins/opensearch-security/tools/hash.sh -p 'YourPassword'"
-> ```
+> Internal passwords (kibanaserver, filebeat, API) are derived deterministically from `adminPassword` using SHA-256. You never need to set them manually.
 
 ### Indexer
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `indexer.replicas` | Number of indexer replicas | `1` |
+| `indexer.replicas` | Number of indexer replicas (3 recommended for quorum) | `3` |
+| `indexer.resources.requests.memory` | Memory request | `2Gi` |
 | `indexer.resources.limits.memory` | Memory limit | `3Gi` |
-| `indexer.javaOpts` | JVM heap settings | `"-Xms1g -Xmx1g"` |
+| `indexer.javaOpts` | JVM heap (keep ≤ 50% of memory limit) | `"-Xms1536m -Xmx1536m"` |
 | `indexer.storage.size` | PVC size | `10Gi` |
+| `indexer.nodeSelector` | Node selector for dedicated nodes | `{}` |
+| `indexer.tolerations` | Tolerations for tainted nodes | `[]` |
 
 ### Manager
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `manager.replicas` | Number of manager replicas | `1` |
+| `manager.replicas` | Number of manager replicas | `2` |
+| `manager.cluster.enabled` | Enable manager cluster mode | `true` |
 | `manager.storage.size` | PVC size (30Gi+ recommended) | `30Gi` |
 | `manager.feedUpdateInterval` | Vulnerability feed update interval | `"12h"` |
-| `manager.logallJson` | Log all events to archives (not just alerts) | `true` |
+| `manager.logallJson` | Log all events to archives | `true` |
+| `manager.nodeSelector` | Node selector for dedicated nodes | `{}` |
+| `manager.tolerations` | Tolerations for tainted nodes | `[]` |
+
+### Dashboard
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `dashboard.replicas` | Number of dashboard replicas | `1` |
+| `dashboard.ingress.enabled` | Enable Ingress for external access | `false` |
+| `dashboard.ingress.host` | Dashboard hostname | `"wazuh.example.com"` |
+| `dashboard.nodeSelector` | Node selector for dedicated nodes | `{}` |
+| `dashboard.tolerations` | Tolerations for tainted nodes | `[]` |
 
 ### Agent
 
@@ -141,7 +127,30 @@ kubectl port-forward svc/wazuh-dashboard 5601:5601 -n wazuh
 | `agent.enabled` | Deploy agent DaemonSet | `true` |
 | `agent.monitoredNamespaces` | Namespaces to monitor (empty = all) | `[]` |
 | `agent.siemOnly` | Disable infra monitoring (use with Prometheus) | `true` |
-| `agent.group` | Agent group for centralized config | `"default"` |
+| `agent.labels` | Labels injected into every event | `{}` |
+| `agent.namespaceMapping` | Map namespaces to project/component labels | `{}` |
+
+### Agent Labels & Namespace Mapping
+
+```yaml
+agent:
+  labels:
+    cluster: "my-cluster"
+    environment: "production"
+    region: "us-east-1"
+
+  namespaceMapping:
+    my-app:
+      project: "myproject"
+      component: "backend"
+      team: "backend-team"
+    my-frontend:
+      project: "myproject"
+      component: "frontend"
+      team: "frontend-team"
+```
+
+Events are automatically enriched with these labels in OpenSearch via an ingest pipeline.
 
 ### S3 Archive Sync
 
@@ -152,81 +161,122 @@ kubectl port-forward svc/wazuh-dashboard 5601:5601 -n wazuh
 | `s3.region` | AWS region | `"us-east-1"` |
 | `s3.syncIntervalSeconds` | Sync interval in seconds | `300` |
 
-> **Note:** S3 sync requires IAM permissions. On EKS, use [Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html) or IRSA to grant the `wazuh-manager` ServiceAccount access to your S3 bucket.
+> Requires IAM permissions. On EKS, use [Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html) to grant the `wazuh-manager` ServiceAccount access to your S3 bucket.
 
-### Cleanup CronJob
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `cleanup.enabled` | Enable vd_updater cleanup CronJob | `true` |
-| `cleanup.schedule` | Cron schedule | `"0 */2 * * *"` |
-
-### StorageClass
+### Cert Rotation
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `storageClass.create` | Create StorageClass resource | `true` |
-| `storageClass.provisioner` | CSI provisioner | `ebs.csi.eks.amazonaws.com` |
-| `storageClass.type` | EBS volume type | `gp3` |
+| `certs.rotation.enabled` | Enable automatic cert rotation CronJob | `false` |
+| `certs.rotation.schedule` | Cron schedule for rotation check | `"0 2 1 * *"` |
+| `certs.rotation.daysBeforeExpiry` | Days before expiry to trigger rotation | `30` |
+| `certs.validityDays` | Certificate validity in days | `1825` |
+
+### Node Isolation (EKS Auto Mode)
+
+For dedicated Wazuh nodes with Karpenter:
+
+```yaml
+# Create a NodePool with taint
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: wazuh
+spec:
+  template:
+    metadata:
+      labels:
+        workload: wazuh
+    spec:
+      taints:
+        - key: workload
+          value: wazuh
+          effect: NoSchedule
+      # ... requirements
+
+# In your values.yaml
+indexer:
+  nodeSelector:
+    workload: wazuh
+  tolerations:
+    - key: workload
+      value: wazuh
+      effect: NoSchedule
+manager:
+  nodeSelector:
+    workload: wazuh
+  tolerations:
+    - key: workload
+      value: wazuh
+      effect: NoSchedule
+dashboard:
+  nodeSelector:
+    workload: wazuh
+  tolerations:
+    - key: workload
+      value: wazuh
+      effect: NoSchedule
+# Agents do NOT get nodeSelector — they run on all nodes
+```
 
 ## EKS Auto Mode Notes
 
-This chart is optimized for [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/automode.html):
-
-- **StorageClass provisioner**: Uses `ebs.csi.eks.amazonaws.com` (not the legacy `kubernetes.io/aws-ebs`)
-- **vm.max_map_count**: Bottlerocket nodes already have `vm.max_map_count=524288` — no init container needed
-- **CoreDNS**: Runs as a systemd service on nodes, not as a Kubernetes pod
-- **Pod Identity**: Recommended for S3 access (no OIDC provider configuration needed)
+- **StorageClass**: Uses `ebs.csi.eks.amazonaws.com` (not legacy `kubernetes.io/aws-ebs`)
+- **vm.max_map_count**: Bottlerocket nodes have `524288` by default
+- **CoreDNS**: Runs as systemd on nodes, not as K8s pod. Chart uses FQDN + `ndots:1` to minimize DNS queries
+- **Pod Identity**: Recommended for S3 access
+- **Karpenter**: Set `consolidateAfter: 10m` to avoid aggressive node recycling
 
 ## Data Retention
 
-For production deployments, configure an ISM (Index State Management) policy in OpenSearch:
-
-```json
-{
-  "policy": {
-    "description": "Wazuh index retention - 6 months hot, then delete",
-    "default_state": "hot",
-    "states": [
-      {
-        "name": "hot",
-        "actions": [],
-        "transitions": [
-          {
-            "state_name": "delete",
-            "conditions": { "min_index_age": "180d" }
-          }
-        ]
-      },
-      {
-        "name": "delete",
-        "actions": [{ "delete": {} }]
-      }
-    ],
-    "ism_template": [
-      { "index_patterns": ["wazuh-alerts-*"], "priority": 100 },
-      { "index_patterns": ["wazuh-archives-*"], "priority": 100 },
-      { "index_patterns": ["wazuh-monitoring-*"], "priority": 100 },
-      { "index_patterns": ["wazuh-statistics-*"], "priority": 100 }
-    ]
-  }
-}
-```
+| Tier | Retention | Storage |
+|------|-----------|---------|
+| **Dashboard** (OpenSearch) | 180 days (ISM policy) | Indexer PVCs |
+| **S3 Standard** | 6 months | S3 bucket |
+| **S3 Glacier** | Indefinite | S3 Lifecycle rule |
 
 ## Troubleshooting
 
-### Disk filling up on Manager PVC
+### Dashboard shows "No matching indices for wazuh-alerts-*"
 
-The vulnerability detector in Wazuh 4.14.x has a known issue where temp files in `/var/ossec/data/queue/vd_updater/tmp/` are never cleaned automatically. Enable the cleanup CronJob (`cleanup.enabled: true`) and consider increasing `manager.feedUpdateInterval` to `12h`.
+Normal on first install. Alerts are generated when agents detect events matching rules (rootcheck, SCA, syscheck). First alerts appear within hours.
 
-### Helm install timeout
+### Indexer not passing readiness probe
 
-If the pre-install certificate generation job times out, check that the namespace exists and the service account has permissions to create secrets.
+The security init container must complete before the indexer is ready. Check init container logs:
+```bash
+kubectl logs -n wazuh wazuh-indexer-0 -c security-config
+```
 
-### Agent DNS resolution
+### Agent stuck in Init
 
-Agents use an init container to resolve the manager's ClusterIP before starting. If agents are stuck in init, check that the manager service is running.
+The agent init container resolves the manager service via environment variable. If stuck, check that the manager service exists:
+```bash
+kubectl get svc -n wazuh | grep manager
+```
+
+### Manager disk filling up
+
+The vulnerability detector in 4.14.x creates temp files that aren't cleaned. Enable cleanup CronJob (`cleanup.enabled: true`) and set `feedUpdateInterval: "12h"`.
+
+### DNS issues on EKS Auto Mode
+
+CoreDNS runs as systemd. If a node has DNS issues, the chart uses Kubernetes service environment variables to avoid DNS dependency. Debug with:
+```bash
+kubectl run dns-test --image=public.ecr.aws/docker/library/busybox:1.36 --rm -i --restart=Never --overrides='{"spec":{"nodeName":"NODE_NAME"}}' -- nslookup kubernetes.default.svc.cluster.local.
+```
+
+## CI Pipeline
+
+The chart includes a GitHub Actions workflow that validates on every push/PR:
+
+1. `helm lint` — Syntax validation
+2. `helm template` + `kubeconform` — K8s schema validation
+3. `kube-score` — Best practices analysis
+4. `pluto` — Deprecated API detection
+5. `trivy` — Security misconfiguration scanning
+6. `ct lint` — Chart testing
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE) for details.
+GPL-2.0 — see [LICENSE](LICENSE) for details.
