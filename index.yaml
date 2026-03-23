@@ -41,7 +41,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T10:05:29.410837-06:00"
+    created: "2026-03-23T10:08:44.830956-06:00"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 9a97da781b22bb1818ca379a5dde1c55a5c830e5774a899fe45f43ab22179697
@@ -68,76 +68,9 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-1.0.2.tgz
     version: 1.0.2
-  - annotations:
-      artifacthub.io/changes: |
-        - kind: added
-          description: 3-node OpenSearch cluster with quorum and parallel bootstrap
-        - kind: added
-          description: Manager cluster mode (master + worker) with auto-configuration
-        - kind: added
-          description: Security init container with derived passwords (zero manual setup)
-        - kind: added
-          description: Namespace enrichment pipeline for multi-project labeling
-        - kind: added
-          description: Agent labels for multi-cluster identification
-        - kind: added
-          description: FQDN + ndots optimization to reduce DNS queries
-        - kind: added
-          description: Cert rotation CronJob with configurable expiration
-        - kind: added
-          description: Prometheus annotations for metrics scraping
-        - kind: added
-          description: PriorityClass, PDBs, preStop hooks for graceful operations
-        - kind: added
-          description: CI pipeline with helm lint, kubeconform, kube-score, pluto, trivy
-        - kind: added
-          description: Configurable init images, cert params, termination grace periods
-        - kind: added
-          description: NodePool isolation with taints for dedicated wazuh nodes
-        - kind: changed
-          description: Dashboard probes changed from HTTP to TCP (auth compatibility)
-        - kind: changed
-          description: Filebeat uses dedicated user instead of admin
-        - kind: fixed
-          description: Osquery warnings disabled (not installed in containers)
-        - kind: fixed
-          description: S3 sync error handling improved
-        - kind: security
-          description: Dashboard SSL verification enabled for indexer connection
-      artifacthub.io/license: GPL-2.0
-      artifacthub.io/signKey: ""
-    apiVersion: v2
-    appVersion: 4.14.4
-    created: "2026-03-23T15:44:38.273045377Z"
-    description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
-      for EKS Auto Mode)
-    digest: 469b673724ac5a645378a8517c1ff4bde554d6b8e28fc6f2ed781ee2fd475956
-    home: https://github.com/ileonelperea/wazuh-helm
-    icon: https://wazuh.com/uploads/2022/05/WAZUH.png
-    keywords:
-    - wazuh
-    - siem
-    - security
-    - monitoring
-    - opensearch
-    - eks
-    - kubernetes
-    - threat-detection
-    - vulnerability-detection
-    maintainers:
-    - name: ileonelperea
-      url: https://github.com/ileonelperea
-    name: wazuh
-    sources:
-    - https://github.com/ileonelperea/wazuh-helm
-    - https://documentation.wazuh.com/
-    type: application
-    urls:
-    - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-1.0.1.tgz
-    version: 1.0.1
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T10:05:29.409809-06:00"
+    created: "2026-03-23T10:08:44.829948-06:00"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
@@ -166,7 +99,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T10:05:29.408796-06:00"
+    created: "2026-03-23T10:08:44.828973-06:00"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
@@ -193,4 +126,4 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-03-23T10:05:29.407768-06:00"
+generated: "2026-03-23T10:08:44.827921-06:00"
