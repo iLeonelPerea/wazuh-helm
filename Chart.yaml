@@ -58,5 +58,5 @@ annotations:
       description: S3 sync error handling improved
     - kind: security
       description: Dashboard SSL verification enabled for indexer connection
-  artifacthub.io/license: GPL-2.0
+  artifacthub.io/license: MIT
   artifacthub.io/signKey: ""

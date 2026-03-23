@@ -279,4 +279,4 @@ The chart includes a GitHub Actions workflow that validates on every push/PR:
 
 ## License
 
-GPL-2.0 — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.
