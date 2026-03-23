@@ -1,3 +1,4 @@
+{{- if gt (int .Values.manager.replicas) 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -5,7 +6,8 @@ metadata:
   labels:
     {{- include "wazuh.labels" . | nindent 4 }}
 spec:
-  maxUnavailable: 1
+  minAvailable: {{ sub (int .Values.manager.replicas) 1 }}
   selector:
     matchLabels:
       {{- include "wazuh.manager.selectorLabels" . | nindent 6 }}
+{{- end }}

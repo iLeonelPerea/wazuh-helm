@@ -25,7 +25,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: init-index-patterns
-          image: curlimages/curl:8.5.0
+          image: public.ecr.aws/curl/curl:8.5.0
           command:
             - /bin/sh
             - -c

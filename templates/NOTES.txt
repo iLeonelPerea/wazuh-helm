@@ -22,8 +22,8 @@ Access the Dashboard:
   kubectl port-forward svc/{{ include "wazuh.fullname" . }}-dashboard 5601:5601 -n {{ .Release.Namespace }}
 
   Then open: http://localhost:5601
-  Username: {{ .Values.security.indexerUsername }}
-  Password: (value of security.indexerPassword)
+  Username: admin
+  Password: (value of security.adminPassword)
 
 {{- if .Values.agent.monitoredNamespaces }}
 
@@ -40,6 +40,6 @@ Manager API:
 
   kubectl port-forward svc/{{ include "wazuh.fullname" . }}-manager 55000:55000 -n {{ .Release.Namespace }}
 
-  curl -k -u {{ .Values.security.apiUsername }}:<password> https://localhost:55000
+  curl -k -u wazuh-wui:<password> https://localhost:55000
 
 For more information, visit: https://documentation.wazuh.com/

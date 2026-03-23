@@ -18,8 +18,17 @@ spec:
         {{- include "wazuh.manager.selectorLabels" . | nindent 8 }}
       annotations:
         {{- include "wazuh.checksumAnnotations" . | nindent 8 }}
+        {{- if .Values.manager.metrics.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.manager.metrics.port | quote }}
+        prometheus.io/path: {{ .Values.manager.metrics.path | quote }}
+        prometheus.io/scheme: "https"
+        {{- end }}
     spec:
-      serviceAccountName: wazuh-manager
+      serviceAccountName: {{ include "wazuh.fullname" . }}-manager
+      {{- include "wazuh.dnsConfig" . | nindent 6 }}
+      priorityClassName: {{ include "wazuh.fullname" . }}-critical
+      terminationGracePeriodSeconds: {{ .Values.manager.terminationGracePeriodSeconds }}
       securityContext:
         fsGroup: 101
       {{- with .Values.manager.nodeSelector }}
@@ -34,6 +43,37 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: inject-filebeat-config
+          image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /config-template/filebeat.yml /filebeat-config/filebeat.yml
+              # Replace indexer FQDN with ClusterIP from auto-injected env var (zero DNS)
+              if [ -n "$WAZUH_INDEXER_SERVICE_HOST" ]; then
+                sed -i "s|__INDEXER_HOST__|${WAZUH_INDEXER_SERVICE_HOST}|g" /filebeat-config/filebeat.yml
+              fi
+              echo "Filebeat config prepared"
+          volumeMounts:
+            - name: manager-config
+              mountPath: /config-template
+              readOnly: true
+            - name: filebeat-config
+              mountPath: /filebeat-config
       containers:
         - name: wazuh-manager
           image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
@@ -58,7 +98,7 @@ spec:
             - name: TZ
               value: {{ .Values.global.timezone | quote }}
             - name: INDEXER_URL
-              value: "https://{{ include "wazuh.fullname" . }}-indexer:9200"
+              value: "https://{{ include "wazuh.indexer.host" . }}:9200"
             - name: INDEXER_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -68,6 +108,13 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "wazuh.indexerSecretName" . }}
+                  key: password
+            - name: FILEBEAT_USERNAME
+              value: "filebeat_internal"
+            - name: FILEBEAT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.filebeatSecretName" . }}
                   key: password
             - name: FILEBEAT_SSL_VERIFICATION_MODE
               value: "certificate"
@@ -87,6 +134,13 @@ spec:
                 secretKeyRef:
                   name: {{ include "wazuh.apiSecretName" . }}
                   key: password
+            {{- if .Values.manager.cluster.enabled }}
+            - name: WAZUH_CLUSTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-cluster-key
+                  key: key
+            {{- end }}
           lifecycle:
             postStart:
               exec:
@@ -114,6 +168,30 @@ spec:
                     # logall_json: yes for archives
                     sed -i 's|<logall_json>no</logall_json>|<logall_json>yes</logall_json>|' $CONF 2>/dev/null || true
                     {{- end }}
+                    {{- if .Values.manager.cluster.enabled }}
+                    # Configure cluster mode based on pod ordinal
+                    # Note: $(hostname) binary doesn't exist in Wazuh image, use $HOSTNAME env var
+                    ORDINAL=${HOSTNAME##*-}
+                    if [ "$ORDINAL" = "0" ]; then
+                      NODE_TYPE="master"
+                      NODE_NAME="master-node"
+                    else
+                      NODE_TYPE="worker"
+                      NODE_NAME="worker-${ORDINAL}"
+                    fi
+                    MASTER_ADDR="{{ include "wazuh.fullname" . }}-manager-0.{{ include "wazuh.fullname" . }}-manager.{{ .Release.Namespace }}.svc.cluster.local."
+                    # Modify existing cluster block in ossec.conf (Wazuh image ships one with disabled=yes)
+                    sed -i "s|<disabled>yes</disabled>|<disabled>no</disabled>|" $CONF 2>/dev/null || true
+                    sed -i "s|<node_name>.*</node_name>|<node_name>${NODE_NAME}</node_name>|" $CONF 2>/dev/null || true
+                    sed -i "s|<node_type>.*</node_type>|<node_type>${NODE_TYPE}</node_type>|" $CONF 2>/dev/null || true
+                    sed -i "s|<key>.*</key>|<key>${WAZUH_CLUSTER_KEY}</key>|" $CONF 2>/dev/null || true
+                    sed -i "s|<name>wazuh</name>|<name>{{ .Values.manager.cluster.name }}</name>|" $CONF 2>/dev/null || true
+                    sed -i "s|<node>NODE_IP</node>|<node>${MASTER_ADDR}</node>|" $CONF 2>/dev/null || true
+                    sed -i "s|<node>.*manager.*</node>|<node>${MASTER_ADDR}</node>|" $CONF 2>/dev/null || true
+                    {{- end }}
+                    # Disable osquery (not installed in container, generates warnings)
+                    sed -i 's|<wodle name="osquery">|<wodle name="osquery">\n    <disabled>yes</disabled>|' $CONF 2>/dev/null || true
+                    sed -i '/<wodle name="osquery">/,/<\/wodle>/{s|<disabled>no</disabled>|<disabled>yes</disabled>|}' $CONF 2>/dev/null || true
                     # Copy local_internal_options.conf for log rotation settings
                     if [ -f /tmp/manager-config/local_internal_options.conf ]; then
                       cp /tmp/manager-config/local_internal_options.conf /var/ossec/etc/local_internal_options.conf
@@ -124,6 +202,28 @@ spec:
                       cp /tmp/manager-config/local_rules.xml /var/ossec/etc/rules/local_rules.xml
                       chown wazuh:wazuh /var/ossec/etc/rules/local_rules.xml 2>/dev/null || true
                     fi
+                    # Overwrite filebeat.yml from ConfigMap (PVC may have stale config)
+                    if [ -f /tmp/manager-config/filebeat.yml ]; then
+                      cp /tmp/manager-config/filebeat.yml /etc/filebeat/filebeat.yml
+                      chown root:root /etc/filebeat/filebeat.yml 2>/dev/null || true
+                    fi
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    # Graceful shutdown: let agents disconnect cleanly
+                    echo "Stopping Wazuh manager gracefully..."
+                    /var/ossec/bin/wazuh-control stop 2>/dev/null || true
+                    sleep 5
+          startupProbe:
+            tcpSocket:
+              port: agents-events
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 30
+            timeoutSeconds: 5
           readinessProbe:
             tcpSocket:
               port: agents-events
@@ -165,28 +265,40 @@ spec:
             - name: shared-config
               mountPath: /tmp/shared-config
               readOnly: true
-            - name: manager-config
-              mountPath: /etc/filebeat/filebeat.yml
-              subPath: filebeat.yml
-              readOnly: true
+            - name: filebeat-config
+              mountPath: /etc/filebeat
             - name: manager-config
               mountPath: /tmp/manager-config
               readOnly: true
         {{- if .Values.s3.enabled }}
         - name: s3-sync
           image: "{{ .Values.s3.image.repository }}:{{ .Values.s3.image.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command:
             - /bin/sh
             - -c
             - |
               echo "Starting S3 archive sync..."
+              FAIL_COUNT=0
+              MAX_FAILURES=10
               while true; do
                 if [ -d /var/ossec/logs/archives ]; then
-                  aws s3 sync /var/ossec/logs/archives/ s3://{{ .Values.s3.bucket }}/archives/ \
+                  if aws s3 sync /var/ossec/logs/archives/ s3://{{ .Values.s3.bucket }}/archives/ \
                     --exclude "*.tmp" --exclude "*.lock" \
-                    --region {{ .Values.s3.region }} --quiet 2>/dev/null && \
-                    echo "$(date) - Sync completed" || \
-                    echo "$(date) - Sync failed"
+                    --region {{ .Values.s3.region }} --quiet 2>&1; then
+                    echo "$(date) - Sync completed"
+                    FAIL_COUNT=0
+                  else
+                    FAIL_COUNT=$((FAIL_COUNT + 1))
+                    echo "$(date) - Sync FAILED ($FAIL_COUNT/$MAX_FAILURES)"
+                    if [ $FAIL_COUNT -ge $MAX_FAILURES ]; then
+                      echo "$(date) - FATAL: $MAX_FAILURES consecutive failures, exiting"
+                      exit 1
+                    fi
+                  fi
                 fi
                 sleep {{ .Values.s3.syncIntervalSeconds }}
               done
@@ -211,6 +323,8 @@ spec:
         - name: manager-config
           configMap:
             name: {{ include "wazuh.fullname" . }}-manager-config
+        - name: filebeat-config
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: wazuh-manager-data

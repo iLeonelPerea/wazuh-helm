@@ -4,10 +4,67 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm Lint
+        run: helm lint .
+
+      - name: Helm Template
+        run: helm template wazuh . > /tmp/rendered.yaml
+
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Kubeconform (schema validation)
+        run: helm template wazuh . | kubeconform -strict -summary
+
+      - name: Install kube-score
+        run: |
+          curl -sL https://github.com/zegl/kube-score/releases/download/v1.20.0/kube-score_1.20.0_linux_amd64.tar.gz | tar xz
+          sudo mv kube-score /usr/local/bin/
+
+      - name: Kube-score (best practices)
+        continue-on-error: true
+        run: helm template wazuh . | kube-score score - --output-format ci
+
+      - name: Install pluto
+        run: |
+          curl -sL https://github.com/FairwindsOps/pluto/releases/latest/download/pluto_linux_amd64.tar.gz | tar xz
+          sudo mv pluto /usr/local/bin/
+
+      - name: Pluto (deprecated APIs)
+        run: helm template wazuh . | pluto detect -
+
+      - name: Trivy (misconfigurations)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: /tmp/rendered.yaml
+          severity: CRITICAL
+          exit-code: 1
+
+      - name: Chart Testing Lint
+        uses: helm/chart-testing-action@v2.7.0
+      - run: ct lint --charts . --validate-maintainers=false
+
   release:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write

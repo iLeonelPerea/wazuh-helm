@@ -52,7 +52,7 @@ data:
       <indexer>
         <enabled>yes</enabled>
         <hosts>
-          <host>https://{{ include "wazuh.fullname" . }}-indexer:9200</host>
+          <host>https://{{ include "wazuh.indexer.host" . }}:9200</host>
         </hosts>
         <ssl>
           <certificate_authorities>
@@ -62,6 +62,22 @@ data:
           <key>/etc/ssl/filebeat-key.pem</key>
         </ssl>
       </indexer>
+
+      {{- if .Values.manager.cluster.enabled }}
+      <cluster>
+        <name>{{ .Values.manager.cluster.name }}</name>
+        <node_name>__NODE_NAME__</node_name>
+        <node_type>__NODE_TYPE__</node_type>
+        <key>__CLUSTER_KEY__</key>
+        <port>1516</port>
+        <bind_addr>0.0.0.0</bind_addr>
+        <nodes>
+          <node>{{ include "wazuh.fullname" . }}-manager-0.{{ include "wazuh.manager.fqdn" . }}</node>
+        </nodes>
+        <hidden>no</hidden>
+        <disabled>no</disabled>
+      </cluster>
+      {{- end }}
 
       <ruleset>
         <decoder_dir>ruleset/decoders</decoder_dir>
@@ -85,10 +101,11 @@ data:
     setup.template.json.path: '/etc/filebeat/wazuh-template.json'
     setup.template.json.name: 'wazuh'
     setup.ilm.enabled: false
+
     output.elasticsearch:
-      hosts: [https://{{ include "wazuh.fullname" . }}-indexer:9200]
-      username: '{{ .Values.security.indexerUsername }}'
-      password: '{{ .Values.security.indexerPassword }}'
+      hosts: [https://{{ include "wazuh.indexer.host" . }}:9200]
+      username: '${FILEBEAT_USERNAME}'
+      password: '${FILEBEAT_PASSWORD}'
       ssl.verification_mode: 'certificate'
       ssl.certificate_authorities: ['/etc/ssl/root-ca.pem']
       ssl.certificate: '/etc/ssl/filebeat.pem'

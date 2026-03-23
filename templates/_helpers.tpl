@@ -54,6 +54,21 @@ app.kubernetes.io/component: agent
 {{- end }}
 
 {{/*
+Derived passwords - deterministic from adminPassword, no lookup needed
+*/}}
+{{- define "wazuh.kibanaserverPassword" -}}
+{{- printf "%s-kibanaserver" .Values.security.adminPassword | sha256sum | trunc 20 }}!1A
+{{- end }}
+
+{{- define "wazuh.filebeatPassword" -}}
+{{- printf "%s-filebeat" .Values.security.adminPassword | sha256sum | trunc 20 }}!1A
+{{- end }}
+
+{{- define "wazuh.apiPassword" -}}
+{{- printf "%s-api" .Values.security.adminPassword | sha256sum | trunc 20 }}!1A
+{{- end }}
+
+{{/*
 Secret name helpers - support existingSecret or chart-created secrets
 */}}
 {{- define "wazuh.indexerSecretName" -}}
@@ -72,6 +87,14 @@ Secret name helpers - support existingSecret or chart-created secrets
 {{- end -}}
 {{- end -}}
 
+{{- define "wazuh.filebeatSecretName" -}}
+{{- if .Values.security.existingSecrets.filebeat -}}
+  {{- .Values.security.existingSecrets.filebeat -}}
+{{- else -}}
+  {{- include "wazuh.fullname" . -}}-filebeat-credentials
+{{- end -}}
+{{- end -}}
+
 {{- define "wazuh.dashboardSecretName" -}}
 {{- if .Values.security.existingSecrets.dashboard -}}
   {{- .Values.security.existingSecrets.dashboard -}}
@@ -79,6 +102,38 @@ Secret name helpers - support existingSecret or chart-created secrets
   {{- include "wazuh.fullname" . -}}-dashboard-credentials
 {{- end -}}
 {{- end -}}
+
+{{/*
+FQDN helpers - two variants:
+- .fqdn = with trailing dot (for DNS resolution, avoids search domain queries)
+- .host = without trailing dot (for TLS/HTTPS, must match certificate SANs)
+*/}}
+{{- define "wazuh.indexer.fqdn" -}}
+{{ include "wazuh.fullname" . }}-indexer.{{ .Release.Namespace }}.svc.cluster.local.
+{{- end }}
+
+{{- define "wazuh.indexer.host" -}}
+{{ include "wazuh.fullname" . }}-indexer.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}
+
+{{- define "wazuh.manager.fqdn" -}}
+{{ include "wazuh.fullname" . }}-manager.{{ .Release.Namespace }}.svc.cluster.local.
+{{- end }}
+
+{{- define "wazuh.manager.host" -}}
+{{ include "wazuh.fullname" . }}-manager.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}
+
+{{- define "wazuh.manager.agents.fqdn" -}}
+{{ include "wazuh.fullname" . }}-manager-agents.{{ .Release.Namespace }}.svc.cluster.local.
+{{- end }}
+
+{{- define "wazuh.dnsConfig" -}}
+dnsConfig:
+  options:
+    - name: ndots
+      value: "1"
+{{- end }}
 
 {{/*
 Checksum annotations for manager pods - auto-restart on config/secret changes

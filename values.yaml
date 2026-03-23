@@ -8,26 +8,24 @@
 global:
   # -- Timezone for all containers (e.g., "UTC", "America/Mexico_City", "Europe/London")
   timezone: "UTC"
+  # -- Images for init containers and auxiliary jobs (shared across components)
+  initImages:
+    busybox:
+      repository: public.ecr.aws/docker/library/busybox
+      tag: "1.36"
+    kubectl:
+      repository: public.ecr.aws/bitnami/kubectl
+      tag: "1.32"
 
 # =============================================================================
 # Security & Credentials
 # =============================================================================
 security:
-  # -- OpenSearch admin username
-  indexerUsername: "admin"
-  # -- OpenSearch admin password (CHANGE THIS in production)
-  indexerPassword: "SecurePassword123!"
-  # -- Bcrypt hash ($2a) of indexerPassword. Generate with:
-  #    docker run --rm -it wazuh/wazuh-indexer:4.14.4 bash -c "plugins/opensearch-security/tools/hash.sh -p 'YourPassword'"
-  indexerPasswordHash: "$2a$12$VcCDgh2NDk07JGN0rjGbM.G70e.MBZnOajZPBnZiqGe7f90ax1Pym"
-  # -- Wazuh API username
-  apiUsername: "wazuh-wui"
-  # -- Wazuh API password (CHANGE THIS in production)
-  apiPassword: "MyS3cr37P450r.*-"
-  # -- Dashboard/Kibanaserver user password
-  kibanaserverPassword: "kibanaserver"
-  # -- Bcrypt hash ($2a) of kibanaserverPassword
-  kibanaserverPasswordHash: "$2a$12$QVaK9qxjl3zDwcjmdXNCdOGGj8uw8Qukzb6398gUEgwmlT3.2gqDe"
+  # -- Admin password for the Wazuh Dashboard login (CHANGE THIS in production)
+  adminPassword: "SecurePassword123!"
+  # -- Internal passwords (auto-generated on first install, reused on upgrades)
+  # These are used for internal service communication and should NOT be changed manually.
+  # Override only if using existingSecrets.
   # -- Use existing secrets instead of chart-created ones
   # When set, the chart will NOT create the corresponding Secret resource
   existingSecrets:
@@ -37,6 +35,8 @@ security:
     api: ""
     # -- Name of existing Secret containing 'password' key for dashboard
     dashboard: ""
+    # -- Name of existing Secret containing 'password' key for filebeat
+    filebeat: ""
 
 # =============================================================================
 # StorageClass
@@ -67,21 +67,29 @@ indexer:
     repository: wazuh/wazuh-indexer
     tag: "4.14.4"
     pullPolicy: IfNotPresent
-  # -- Number of indexer replicas
-  replicas: 1
+  # -- Number of indexer replicas (3 recommended for HA with quorum)
+  replicas: 3
   resources:
+    # Burstable with high requests — OOM killer targets lower-request pods first
     requests:
       cpu: 500m
-      memory: 1Gi
+      memory: 2Gi
     limits:
       cpu: "1"
       memory: 3Gi
   # -- JVM heap options (recommended: set Xms=Xmx, and ~50% of memory limit)
-  javaOpts: "-Xms1g -Xmx1g"
+  javaOpts: "-Xms1536m -Xmx1536m"
   storage:
     storageClass: gp3
     # -- Indexer data volume size
     size: 10Gi
+  # -- Termination grace period in seconds
+  terminationGracePeriodSeconds: 120
+  # -- Prometheus metrics scraping
+  metrics:
+    enabled: true
+    port: 9200
+    path: "/_prometheus/metrics"
   # -- Node selector for indexer pods
   nodeSelector: {}
   # -- Tolerations for indexer pods
@@ -100,12 +108,13 @@ manager:
   # -- Number of manager replicas
   replicas: 1
   resources:
+    # Burstable with high requests — OOM killer targets lower-request pods first
     requests:
       cpu: 500m
-      memory: 512Mi
+      memory: 1Gi
     limits:
       cpu: "1"
-      memory: 1Gi
+      memory: 2Gi
   storage:
     storageClass: gp3
     # -- Manager data volume size. 30Gi recommended due to vulnerability feed DB (~4G)
@@ -114,6 +123,15 @@ manager:
   feedUpdateInterval: "12h"
   # -- Enable logging ALL events (not just alerts) to archives
   logallJson: true
+  # -- Wazuh Manager cluster configuration (HA mode)
+  cluster:
+    # -- Enable cluster mode (1 master + N-1 workers). Requires replicas > 1.
+    enabled: false
+    # -- Cluster name (must match across all nodes)
+    name: "wazuh-cluster"
+    # -- 32-character encryption key shared by all cluster nodes.
+    # If empty, auto-generated on first install (stored in Secret).
+    key: ""
   # -- Days to keep rotated log files on disk (S3/Indexer retains full history)
   logRetentionDays: 7
   # -- Custom detection rules for monitored namespaces
@@ -128,6 +146,17 @@ manager:
         pattern: "Pomelo.*error|Pomelo.*fail|Failed to refresh Pomelo|Pomelo.*timeout"
         description: "Pomelo integration error"
         group: "integration_error,pomelo"
+  # -- Termination grace period in seconds
+  terminationGracePeriodSeconds: 90
+  # -- Anti-affinity mode for manager pods when cluster is enabled.
+  # "soft" = prefer different nodes (allows co-location if no other option)
+  # "hard" = require different nodes (pod stays Pending if not possible)
+  antiAffinity: "soft"
+  # -- Prometheus metrics scraping
+  metrics:
+    enabled: true
+    port: 55000
+    path: "/metrics"
   # -- Node selector for manager pods
   nodeSelector: {}
   # -- Tolerations for manager pods
@@ -168,6 +197,11 @@ dashboard:
     #       hosts:
     #         - wazuh.example.com
     tls: []
+  # -- Prometheus metrics scraping
+  metrics:
+    enabled: true
+    port: 5601
+    path: "/api/status"
   # -- Node selector for dashboard pods
   nodeSelector: {}
   # -- Tolerations for dashboard pods
@@ -183,7 +217,7 @@ agent:
   enabled: true
   image:
     repository: wazuh/wazuh-agent
-    tag: "4.14.3"
+    tag: "4.14.4"
     pullPolicy: IfNotPresent
   # -- Agent group for centralized configuration
   group: "default"
@@ -201,6 +235,18 @@ agent:
   # -- SIEM-only mode: disable infrastructure monitoring modules that overlap
   # with Prometheus/Grafana (hardware, network, ports, processes, etc.)
   siemOnly: true
+  # -- Base labels injected into every event (cluster-level identification)
+  # Override per environment in values-{env}.yaml
+  labels: {}
+  # -- Namespace-to-project mapping. Enriches events with project metadata.
+  # The agent extracts the namespace from the log path and applies matching labels.
+  # Example:
+  #   namespaceMapping:
+  #     kamet-apps:
+  #       project: "kamet"
+  #       component: "core"
+  #       team: "backend"
+  namespaceMapping: {}
   # -- Node selector for agent pods
   nodeSelector: {}
   # -- Extra tolerations for agent pods (NoSchedule is always tolerated)
@@ -221,7 +267,7 @@ s3:
   # -- Sync interval in seconds
   syncIntervalSeconds: 300
   image:
-    repository: amazon/aws-cli
+    repository: public.ecr.aws/aws-cli/aws-cli
     tag: "2.22.35"
   resources:
     requests:
@@ -240,7 +286,7 @@ cleanup:
   # -- Cron schedule for cleanup job
   schedule: "0 */2 * * *"
   image:
-    repository: busybox
+    repository: public.ecr.aws/docker/library/busybox
     tag: "1.36"
 
 # =============================================================================
@@ -251,6 +297,30 @@ networkPolicy:
   enabled: false
   # -- Additional egress rules for agents (e.g., to reach external APIs)
   extraEgress: []
+
+# =============================================================================
+# TLS Certificates
+# =============================================================================
+certs:
+  # -- RSA key size for generated certificates
+  keySize: 2048
+  # -- Root CA certificate validity in days (default: 10 years)
+  rootCaDays: 3650
+  # -- Leaf certificate validity in days (default: 5 years)
+  leafCertDays: 1825
+  # -- Certificate subject fields
+  subject:
+    country: "US"
+    locality: "California"
+    organization: "Wazuh"
+  # -- Automatic certificate rotation CronJob
+  rotation:
+    # -- Enable automatic cert rotation before expiration
+    enabled: false
+    # -- Cron schedule for rotation check (default: weekly on Sunday at 3am)
+    schedule: "0 3 * * 0"
+    # -- Days before expiration to trigger renewal
+    renewBeforeDays: 30
 
 # -- Override the chart name
 nameOverride: ""

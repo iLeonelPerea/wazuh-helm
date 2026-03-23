@@ -1,0 +1,29 @@
+# Claude Code
+.claude/
+
+# Environment-specific values (contain passwords and infrastructure details)
+values-dev.yaml
+values-prod.yaml
+values-staging.yaml
+values-*.yaml
+!values.yaml
+
+# Helm
+*.tgz
+.cr-release-packages/
+charts/
+
+# macOS
+.DS_Store
+._*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak

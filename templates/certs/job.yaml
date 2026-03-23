@@ -17,9 +17,25 @@ spec:
     spec:
       serviceAccountName: {{ include "wazuh.fullname" . }}-certs-generator
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: generate-certs
-          image: bitnamilegacy/kubectl:1.32
+          image: "{{ .Values.global.initImages.kubectl.repository }}:{{ .Values.global.initImages.kubectl.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           command:
             - /bin/bash
             - -c
@@ -37,10 +53,10 @@ spec:
               fi
 
               echo "=== Generating Root CA ==="
-              openssl genrsa -out "$CERTS_DIR/root-ca-key.pem" 2048
+              openssl genrsa -out "$CERTS_DIR/root-ca-key.pem" {{ .Values.certs.keySize }}
               openssl req -new -x509 -sha256 -key "$CERTS_DIR/root-ca-key.pem" \
-                -out "$CERTS_DIR/root-ca.pem" -days 3650 \
-                -subj "/C=US/L=California/O=Wazuh/CN=Wazuh Root CA"
+                -out "$CERTS_DIR/root-ca.pem" -days {{ .Values.certs.rootCaDays }} \
+                -subj "/C={{ .Values.certs.subject.country }}/L={{ .Values.certs.subject.locality }}/O={{ .Values.certs.subject.organization }}/CN=Wazuh Root CA"
 
               generate_cert() {
                 local name=$1
@@ -48,7 +64,7 @@ spec:
                 local san=$3
 
                 echo "=== Generating cert: $name (CN=$cn) ==="
-                openssl genrsa -out "$CERTS_DIR/${name}-key.pem" 2048
+                openssl genrsa -out "$CERTS_DIR/${name}-key.pem" {{ .Values.certs.keySize }}
 
                 # Create CSR config with SAN
                 cat > "$CERTS_DIR/${name}.cnf" <<CNFEOF
@@ -58,9 +74,9 @@ spec:
               prompt = no
 
               [req_dn]
-              C = US
-              L = California
-              O = Wazuh
+              C = {{ .Values.certs.subject.country }}
+              L = {{ .Values.certs.subject.locality }}
+              O = {{ .Values.certs.subject.organization }}
               CN = ${cn}
 
               [v3_req]
@@ -81,7 +97,7 @@ spec:
                   -CAkey "$CERTS_DIR/root-ca-key.pem" \
                   -CAcreateserial \
                   -out "$CERTS_DIR/${name}.pem" \
-                  -days 1825 -sha256 \
+                  -days {{ .Values.certs.leafCertDays }} -sha256 \
                   -extfile "$CERTS_DIR/${name}-ext.cnf"
               }
 
@@ -89,8 +105,12 @@ spec:
               generate_cert "admin" "admin" \
                 "DNS:admin"
 
-              generate_cert "indexer" "${FULLNAME}-indexer" \
-                "DNS:${FULLNAME}-indexer,DNS:${FULLNAME}-indexer.${NAMESPACE}.svc,DNS:${FULLNAME}-indexer.${NAMESPACE}.svc.cluster.local,DNS:localhost,IP:127.0.0.1"
+              # Build indexer SAN with all pod ordinals for multi-node cluster
+              INDEXER_SAN="DNS:${FULLNAME}-indexer,DNS:${FULLNAME}-indexer.${NAMESPACE}.svc,DNS:${FULLNAME}-indexer.${NAMESPACE}.svc.cluster.local,DNS:localhost,IP:127.0.0.1"
+              for i in $(seq 0 {{ sub (int .Values.indexer.replicas) 1 }}); do
+                INDEXER_SAN="${INDEXER_SAN},DNS:${FULLNAME}-indexer-${i}.${FULLNAME}-indexer.${NAMESPACE}.svc.cluster.local"
+              done
+              generate_cert "indexer" "${FULLNAME}-indexer" "$INDEXER_SAN"
 
               generate_cert "dashboard" "${FULLNAME}-dashboard" \
                 "DNS:${FULLNAME}-dashboard,DNS:${FULLNAME}-dashboard.${NAMESPACE}.svc,DNS:${FULLNAME}-dashboard.${NAMESPACE}.svc.cluster.local,DNS:localhost,IP:127.0.0.1"

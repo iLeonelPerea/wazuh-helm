@@ -10,6 +10,17 @@ data:
   agent.conf: |
     <agent_config>
 
+      {{- if .Values.agent.labels }}
+      <!-- ============================================ -->
+      <!-- Agent labels for multi-cluster identification -->
+      <!-- ============================================ -->
+      <labels>
+        {{- range $key, $value := .Values.agent.labels }}
+        <label key="{{ $key }}">{{ $value }}</label>
+        {{- end }}
+      </labels>
+      {{- end }}
+
       <!-- ============================================ -->
       <!-- Container log collection                     -->
       <!-- ============================================ -->
