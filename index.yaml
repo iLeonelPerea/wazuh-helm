@@ -3,10 +3,10 @@ entries:
   wazuh:
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-21T03:50:49.635406693Z"
+    created: "2026-03-23T03:33:36.055675006Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
-    digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
+    digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
     home: https://github.com/ileonelperea/wazuh-helm
     icon: https://wazuh.com/uploads/2022/05/WAZUH.png
     keywords:
@@ -28,6 +28,6 @@ entries:
     - https://documentation.wazuh.com/
     type: application
     urls:
-    - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
-    version: 0.1.0
-generated: "2026-03-21T03:50:49.634010967Z"
+    - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-1.0.0.tgz
+    version: 1.0.0
+generated: "2026-03-23T03:33:36.053944008Z"
