@@ -108,20 +108,35 @@ jobs:
 
       - name: Update gh-pages index
         run: |
-          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
-          git rm -rf . 2>/dev/null || true
-          mkdir -p charts
-          cp .cr-release-packages/*.tgz charts/ 2>/dev/null || true
+          # Save packaged chart
+          cp .cr-release-packages/*.tgz /tmp/
 
-          # Merge with existing index if it exists
+          # Switch to gh-pages, preserving existing content
+          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
+          mkdir -p charts
+
+          # Copy new chart package
+          cp /tmp/*.tgz charts/
+
+          # Download previous release tgz files that might be missing locally
+          for tag in $(git tag -l 'v*'); do
+            VERSION="${tag#v}"
+            if [ ! -f "charts/wazuh-${VERSION}.tgz" ]; then
+              echo "Downloading wazuh-${VERSION}.tgz from release ${tag}..."
+              gh release download "${tag}" --pattern "*.tgz" --dir charts/ 2>/dev/null || true
+            fi
+          done
+
+          # Build index merging with existing if present
           if [ -f index.yaml ]; then
             helm repo index charts --url https://ileonelperea.github.io/wazuh-helm/charts --merge index.yaml
-            mv charts/index.yaml .
           else
             helm repo index charts --url https://ileonelperea.github.io/wazuh-helm/charts
-            mv charts/index.yaml .
           fi
+          mv charts/index.yaml .
 
           git add index.yaml charts/
-          git commit -m "Update Helm repo index for v${{ steps.chart.outputs.version }}"
+          git commit -m "Update Helm repo index for v${{ steps.chart.outputs.version }}" || echo "No changes to commit"
           git push origin gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
