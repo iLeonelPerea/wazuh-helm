@@ -37,14 +37,14 @@ entries:
           description: S3 sync error handling improved
         - kind: security
           description: Dashboard SSL verification enabled for indexer connection
-      artifacthub.io/license: GPL-2.0
+      artifacthub.io/license: MIT
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T10:08:44.830956-06:00"
+    created: "2026-03-23T18:47:28.501438-06:00"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
-    digest: 9a97da781b22bb1818ca379a5dde1c55a5c830e5774a899fe45f43ab22179697
+    digest: c9ee608c221842e31bc8aecb0bb36cbaa7add99c8fcc9d840db6d35f732a3ab9
     home: https://github.com/ileonelperea/wazuh-helm
     icon: https://wazuh.com/uploads/2022/05/WAZUH.png
     keywords:
@@ -66,11 +66,11 @@ entries:
     - https://documentation.wazuh.com/
     type: application
     urls:
-    - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-1.0.2.tgz
-    version: 1.0.2
+    - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-1.0.1.tgz
+    version: 1.0.1
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T10:08:44.829948-06:00"
+    created: "2026-03-23T18:47:28.500492-06:00"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
@@ -99,7 +99,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T10:08:44.828973-06:00"
+    created: "2026-03-23T18:47:28.499515-06:00"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
@@ -126,4 +126,4 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-03-23T10:08:44.827921-06:00"
+generated: "2026-03-23T18:47:28.498485-06:00"

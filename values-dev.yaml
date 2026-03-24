@@ -1,0 +1,69 @@
+# =============================================================================
+# Wazuh Dev Environment - kamet-dev cluster
+# Usage: helm install wazuh . -n wazuh -f values-dev.yaml
+# =============================================================================
+
+global:
+  timezone: "America/Mexico_City"
+
+security:
+  adminPassword: "SecurePassword123!"
+
+indexer:
+  replicas: 3
+  javaOpts: "-Xms1536m -Xmx1536m"
+  nodeSelector:
+    workload: wazuh
+  tolerations:
+    - key: workload
+      value: wazuh
+      effect: NoSchedule
+
+manager:
+  replicas: 2
+  logallJson: true
+  feedUpdateInterval: "12h"
+  cluster:
+    enabled: true
+  nodeSelector:
+    workload: wazuh
+  tolerations:
+    - key: workload
+      value: wazuh
+      effect: NoSchedule
+
+dashboard:
+  nodeSelector:
+    workload: wazuh
+  tolerations:
+    - key: workload
+      value: wazuh
+      effect: NoSchedule
+
+agent:
+  monitoredNamespaces:
+    - kamet-apps
+    - kamet-prepaid
+  labels:
+    cluster: "kamet-dev"
+    environment: "development"
+    region: "us-east-1"
+    account: "058264491838"
+  namespaceMapping:
+    kamet-apps:
+      project: "kamet"
+      component: "core"
+      team: "backend"
+    kamet-prepaid:
+      project: "kamet"
+      component: "prepaid"
+      team: "prepaid"
+
+s3:
+  enabled: true
+  bucket: "wazuh-archives-058264491838"
+
+certs:
+  rotation:
+    enabled: true
+    renewBeforeDays: 30
