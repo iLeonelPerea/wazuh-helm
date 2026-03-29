@@ -2,7 +2,7 @@ apiVersion: v2
 name: wazuh
 description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized for EKS Auto Mode)
 type: application
-version: 1.0.1
+version: 1.1.0
 appVersion: "4.14.4"
 home: https://github.com/ileonelperea/wazuh-helm
 sources:
@@ -24,39 +24,37 @@ keywords:
 icon: https://wazuh.com/uploads/2022/05/WAZUH.png
 annotations:
   artifacthub.io/changes: |
-    - kind: added
-      description: 3-node OpenSearch cluster with quorum and parallel bootstrap
-    - kind: added
-      description: Manager cluster mode (master + worker) with auto-configuration
-    - kind: added
-      description: Security init container with derived passwords (zero manual setup)
-    - kind: added
-      description: Namespace enrichment pipeline for multi-project labeling
-    - kind: added
-      description: Agent labels for multi-cluster identification
-    - kind: added
-      description: FQDN + ndots optimization to reduce DNS queries
-    - kind: added
-      description: Cert rotation CronJob with configurable expiration
-    - kind: added
-      description: Prometheus annotations for metrics scraping
-    - kind: added
-      description: PriorityClass, PDBs, preStop hooks for graceful operations
-    - kind: added
-      description: CI pipeline with helm lint, kubeconform, kube-score, pluto, trivy
-    - kind: added
-      description: Configurable init images, cert params, termination grace periods
-    - kind: added
-      description: NodePool isolation with taints for dedicated wazuh nodes
-    - kind: changed
-      description: Dashboard probes changed from HTTP to TCP (auth compatibility)
-    - kind: changed
-      description: Filebeat uses dedicated user instead of admin
-    - kind: fixed
-      description: Osquery warnings disabled (not installed in containers)
-    - kind: fixed
-      description: S3 sync error handling improved
     - kind: security
-      description: Dashboard SSL verification enabled for indexer connection
+      description: "seccompProfile RuntimeDefault on all pods"
+    - kind: security
+      description: "Drop ALL capabilities on every container with minimal per-component adds"
+    - kind: security
+      description: "allowPrivilegeEscalation false on all containers"
+    - kind: security
+      description: "wazuh.yml chmod 640 prevents duplicate hosts key crash"
+    - kind: added
+      description: "Ordered startup via init containers (Indexer → Manager → Dashboard)"
+    - kind: added
+      description: "wait-for-indexer init container on Manager (TCP 9200)"
+    - kind: added
+      description: "wait-for-dependencies init container on Dashboard (TCP 9200 + 55000)"
+    - kind: added
+      description: "Vault Agent Injector integration as toggleable feature (vault.enabled)"
+    - kind: added
+      description: "vault-bridge init container for Vault-to-K8s-Secret sync"
+    - kind: added
+      description: "kibana_wazuh_access role and mapping for dashboard index access"
+    - kind: added
+      description: "Rebuild index script for Helm repository recovery"
+    - kind: changed
+      description: "Agents use native Wazuh retry instead of init container wait"
+    - kind: changed
+      description: "Manager readiness probe initialDelaySeconds 30 to 45"
+    - kind: changed
+      description: "Release workflow regenerates index.yaml from scratch (no merge)"
+    - kind: fixed
+      description: "serviceAccountName fallback for dashboard/indexer when Vault disabled"
+    - kind: fixed
+      description: "Template permissions added to manage_wazuh_index role"
   artifacthub.io/license: MIT
   artifacthub.io/signKey: ""

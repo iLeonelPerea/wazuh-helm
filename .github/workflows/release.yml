@@ -90,13 +90,29 @@ jobs:
           echo "version=$(grep '^version:' Chart.yaml | awk '{print $2}')" >> $GITHUB_OUTPUT
           echo "name=$(grep '^name:' Chart.yaml | awk '{print $2}')" >> $GITHUB_OUTPUT
 
+      - name: Check if release already exists
+        id: check_release
+        run: |
+          VERSION="${{ steps.chart.outputs.version }}"
+          if gh release view "v${VERSION}" &>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release v${VERSION} already exists, skipping release creation"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release v${VERSION} does not exist, will create"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Package chart
+        if: steps.check_release.outputs.exists == 'false'
         run: |
           helm package .
           mkdir -p .cr-release-packages
           mv *.tgz .cr-release-packages/
 
       - name: Create GitHub Release
+        if: steps.check_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.chart.outputs.version }}
@@ -106,37 +122,81 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update gh-pages index
+      - name: Rebuild gh-pages index from scratch
         run: |
-          # Save packaged chart
-          cp .cr-release-packages/*.tgz /tmp/
+          set -euo pipefail
+          VERSION="${{ steps.chart.outputs.version }}"
 
-          # Switch to gh-pages, preserving existing content
-          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
-          mkdir -p charts
+          # Create clean working directory
+          WORK_DIR=$(mktemp -d)
+          mkdir -p "${WORK_DIR}/charts"
 
-          # Copy new chart package
-          cp /tmp/*.tgz charts/
-
-          # Download previous release tgz files that might be missing locally
-          for tag in $(git tag -l 'v*'); do
-            VERSION="${tag#v}"
-            if [ ! -f "charts/wazuh-${VERSION}.tgz" ]; then
-              echo "Downloading wazuh-${VERSION}.tgz from release ${tag}..."
-              gh release download "${tag}" --pattern "*.tgz" --dir charts/ 2>/dev/null || true
-            fi
+          # Download .tgz from EVERY GitHub Release that has assets
+          echo "=== Downloading chart packages from all releases ==="
+          for tag in $(gh release list --limit 100 --json tagName -q '.[].tagName' | sort -V); do
+            echo "Processing release ${tag}..."
+            gh release download "${tag}" \
+              --pattern "*.tgz" \
+              --dir "${WORK_DIR}/charts/" 2>/dev/null || {
+              echo "  WARN: No .tgz asset in release ${tag}, skipping"
+              continue
+            }
+            echo "  OK: Downloaded assets for ${tag}"
           done
 
-          # Build index merging with existing if present
-          if [ -f index.yaml ]; then
-            helm repo index charts --url https://ileonelperea.github.io/wazuh-helm/charts --merge index.yaml
-          else
-            helm repo index charts --url https://ileonelperea.github.io/wazuh-helm/charts
+          # Verify we have at least the current version
+          CURRENT_TGZ="${WORK_DIR}/charts/wazuh-${VERSION}.tgz"
+          if [ ! -f "${CURRENT_TGZ}" ]; then
+            echo "WARN: Current version ${VERSION} not found in releases, packaging from source..."
+            helm package . --destination "${WORK_DIR}/charts/"
           fi
-          mv charts/index.yaml .
 
-          git add index.yaml charts/
-          git commit -m "Update Helm repo index for v${{ steps.chart.outputs.version }}" || echo "No changes to commit"
+          # List what we have
+          echo "=== Chart packages collected ==="
+          ls -la "${WORK_DIR}/charts/"
+
+          # Generate index.yaml from scratch (NO merge)
+          echo "=== Generating index.yaml ==="
+          helm repo index "${WORK_DIR}/charts" \
+            --url https://ileonelperea.github.io/wazuh-helm/charts
+
+          # Verify generated index
+          echo "=== Verifying index.yaml ==="
+          ENTRIES=$(grep -c 'version:' "${WORK_DIR}/charts/index.yaml" || echo "0")
+          echo "Found ${ENTRIES} chart version(s) in index"
+          cat "${WORK_DIR}/charts/index.yaml"
+
+          if [ "${ENTRIES}" -eq 0 ]; then
+            echo "ERROR: index.yaml has no entries!"
+            exit 1
+          fi
+
+          # Switch to gh-pages branch
+          git stash --include-untracked || true
+          if git rev-parse --verify origin/gh-pages &>/dev/null; then
+            git checkout gh-pages
+            # Clean old charts directory
+            rm -rf charts index.yaml
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+          fi
+
+          # Copy fresh content
+          mkdir -p charts
+          cp "${WORK_DIR}/charts/"*.tgz charts/
+          cp "${WORK_DIR}/charts/index.yaml" .
+
+          # Copy static files from main branch if they exist
+          git checkout main -- artifacthub-repo.yml 2>/dev/null || true
+
+          # Commit and push
+          git add index.yaml charts/ artifacthub-repo.yml 2>/dev/null || true
+          git commit -m "Release v${VERSION}: rebuild index with $(ls charts/*.tgz | wc -l) chart(s)" || echo "No changes to commit"
           git push origin gh-pages
+
+          # Cleanup
+          rm -rf "${WORK_DIR}"
+          echo "=== Done ==="
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
