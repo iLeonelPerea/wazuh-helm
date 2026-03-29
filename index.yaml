@@ -39,7 +39,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-29T21:12:14.485374163Z"
+    created: "2026-03-29T22:50:07.146605295Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 93756ed933e775425a93a7aeebd2d6c30fe608fb397b8e4fac0d9d5655b46382
@@ -106,7 +106,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-29T21:12:14.483087654Z"
+    created: "2026-03-29T22:50:07.144648705Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c9ee608c221842e31bc8aecb0bb36cbaa7add99c8fcc9d840db6d35f732a3ab9
@@ -135,7 +135,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-29T21:12:14.481674127Z"
+    created: "2026-03-29T22:50:07.142921672Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
@@ -164,7 +164,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-29T21:12:14.480238197Z"
+    created: "2026-03-29T22:50:07.141534821Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
@@ -191,4 +191,4 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-03-29T21:12:14.478879622Z"
+generated: "2026-03-29T22:50:07.140218172Z"
