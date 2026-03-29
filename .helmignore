@@ -19,3 +19,11 @@ docs/
 # Testing
 tests/
 ci/
+# Project context (internal use only)
+CLAUDE.md
+.claude/
+# Unrelated files
+*.jsx
+*.plugin
+VAULT_*.md
+README_VAULT_*.md

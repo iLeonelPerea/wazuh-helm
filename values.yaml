@@ -182,14 +182,14 @@ manager:
   agentGroups:
     internal-services:
       labels:
-        account: "851725383384"
-        cluster: "kamet-internal-services"
+        account: "123456789012"
+        cluster: "my-internal-cluster"
         environment: "internal"
         region: "us-east-1"
     prod:
       labels:
-        account: "533267243705"
-        cluster: "kamet-prod"
+        account: "987654321098"
+        cluster: "my-prod-cluster"
         environment: "production"
         region: "us-east-1"
   # -- Node selector for manager pods
@@ -277,8 +277,8 @@ agent:
   # The agent extracts the namespace from the log path and applies matching labels.
   # Example:
   #   namespaceMapping:
-  #     kamet-apps:
-  #       project: "kamet"
+  #     my-app:
+  #       project: "myproject"
   #       component: "core"
   #       team: "backend"
   namespaceMapping: {}
