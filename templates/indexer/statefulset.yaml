@@ -20,6 +20,9 @@ spec:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.indexer.selectorLabels" . | nindent 8 }}
       annotations:
+        {{- if .Values.vault.enabled }}
+        {{- include "wazuh.vaultAnnotations" . | nindent 8 }}
+        {{- end }}
         checksum/config: {{ include (print $.Template.BasePath "/indexer/configmap.yaml") . | sha256sum }}
         checksum/passwords: {{ printf "%s-%s-%s" .Values.security.adminPassword (include "wazuh.kibanaserverPassword" .) (include "wazuh.filebeatPassword" .) | sha256sum }}
         {{- if .Values.indexer.metrics.enabled }}
@@ -32,8 +35,15 @@ spec:
       {{- include "wazuh.dnsConfig" . | nindent 6 }}
       priorityClassName: {{ include "wazuh.fullname" . }}-critical
       terminationGracePeriodSeconds: {{ .Values.indexer.terminationGracePeriodSeconds }}
+      {{- if .Values.vault.enabled }}
+      serviceAccountName: {{ include "wazuh.fullname" . }}-vault
+      {{- else }}
+      serviceAccountName: default
+      {{- end }}
       securityContext:
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.indexer.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -47,6 +57,73 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        {{- if .Values.vault.enabled }}
+        - name: vault-bridge
+          image: "{{ .Values.global.initImages.kubectl.repository }}:{{ .Values.global.initImages.kubectl.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 65534
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "=== Creating temporary K8s secrets from Vault files ==="
+              # Read indexer credentials
+              INDEXER_USER=$(grep '^username=' /vault/secrets/indexer-credentials | cut -d= -f2)
+              INDEXER_PASS=$(grep '^password=' /vault/secrets/indexer-credentials | cut -d= -f2)
+              API_USER=$(grep '^username=' /vault/secrets/api-credentials | cut -d= -f2)
+              API_PASS=$(grep '^password=' /vault/secrets/api-credentials | cut -d= -f2)
+              DASH_PASS=$(grep '^password=' /vault/secrets/dashboard-credentials | cut -d= -f2)
+              FB_PASS=$(grep '^password=' /vault/secrets/filebeat-credentials | cut -d= -f2)
+
+              # Validate all passwords were read
+              for var in INDEXER_USER INDEXER_PASS API_USER API_PASS DASH_PASS FB_PASS; do
+                eval val=\$$var
+                if [ -z "$val" ]; then
+                  echo "ERROR: Failed to read $var from Vault files"
+                  ls -la /vault/secrets/
+                  exit 1
+                fi
+              done
+
+              # Create/update temp secrets with label for cleanup
+              RELEASE="{{ include "wazuh.fullname" . }}"
+              NS="{{ .Release.Namespace }}"
+
+              kubectl create secret generic ${RELEASE}-indexer-credentials \
+                --from-literal=username="$INDEXER_USER" \
+                --from-literal=password="$INDEXER_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+
+              kubectl create secret generic ${RELEASE}-api-credentials \
+                --from-literal=username="$API_USER" \
+                --from-literal=password="$API_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+
+              kubectl create secret generic ${RELEASE}-dashboard-credentials \
+                --from-literal=password="$DASH_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+
+              kubectl create secret generic ${RELEASE}-filebeat-credentials \
+                --from-literal=password="$FB_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+
+              # Label all temp secrets
+              for secret in indexer-credentials api-credentials dashboard-credentials filebeat-credentials; do
+                kubectl label secret ${RELEASE}-${secret} -n $NS \
+                  app.kubernetes.io/managed-by=vault-bridge \
+                  vault-source=true --overwrite 2>/dev/null || true
+              done
+
+              echo "=== Vault bridge complete: 4 secrets created ==="
+        {{- end }}
         - name: volume-permissions
           image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
           securityContext:
@@ -69,7 +146,12 @@ spec:
         - name: security-config
           image: "{{ .Values.indexer.image.repository }}:{{ .Values.indexer.image.tag }}"
           securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
             allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             requests:
               cpu: 10m
@@ -78,6 +160,7 @@ spec:
               cpu: 100m
               memory: 64Mi
           env:
+            {{- if not .Values.vault.enabled }}
             - name: ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -93,11 +176,26 @@ spec:
                 secretKeyRef:
                   name: {{ include "wazuh.filebeatSecretName" . }}
                   key: password
+            {{- else }}
+            - name: VAULT_ENABLED
+              value: "true"
+            {{- end }}
           command:
             - /bin/bash
             - -c
             - |
               echo "=== Preparing security config ==="
+              {{- if .Values.vault.enabled }}
+              # Read passwords from Vault-injected files
+              ADMIN_PASSWORD=$(grep '^password=' /vault/secrets/indexer-credentials | cut -d= -f2)
+              KIBANA_PASSWORD=$(grep '^password=' /vault/secrets/dashboard-credentials | cut -d= -f2)
+              FILEBEAT_PASSWORD=$(grep '^password=' /vault/secrets/filebeat-credentials | cut -d= -f2)
+              if [ -z "$ADMIN_PASSWORD" ] || [ -z "$KIBANA_PASSWORD" ] || [ -z "$FILEBEAT_PASSWORD" ]; then
+                echo "ERROR: Failed to read passwords from Vault files"
+                exit 1
+              fi
+              echo "Passwords loaded from Vault files"
+              {{- end }}
               export JAVA_HOME=/usr/share/wazuh-indexer/jdk
               export PATH=$JAVA_HOME/bin:$PATH
               HASH_TOOL="/usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh"
@@ -154,6 +252,11 @@ spec:
                 reserved: true
                 users:
                   - "kibanaserver"
+              kibana_wazuh_access:
+                reserved: false
+                users:
+                  - "kibanaserver"
+                description: "Maps kibanaserver to wazuh index access"
               kibana_user:
                 reserved: false
                 backend_roles:
@@ -164,23 +267,56 @@ spec:
                   - "filebeat_internal"
               EOF
 
-              # Add manage_wazuh_index role to roles.yml
-              if ! grep -q 'manage_wazuh_index' /security-config/roles.yml 2>/dev/null; then
-                cat >> /security-config/roles.yml << EOF
+              # Replace manage_wazuh_index role in roles.yml with correct cluster permissions
+              # Default Wazuh roles.yml ships without cluster_monitor - we must override it
+              if grep -q 'manage_wazuh_index' /security-config/roles.yml 2>/dev/null; then
+                awk '/^manage_wazuh_index:/{skip=1; next} /^[a-zA-Z_]/{skip=0} !skip' /security-config/roles.yml > /tmp/roles_clean.yml
+                mv /tmp/roles_clean.yml /security-config/roles.yml
+              fi
+              cat >> /security-config/roles.yml << EOF
 
               manage_wazuh_index:
                 reserved: false
                 cluster_permissions:
                   - "cluster_monitor"
+                  - "cluster_composite_ops"
                   - "cluster:admin/ingest/pipeline/put"
                   - "cluster:admin/ingest/pipeline/get"
+                  - "indices:admin/template/put"
+                  - "indices:admin/template/get"
+                  - "indices:admin/template/delete"
                 index_permissions:
                   - index_patterns:
                       - "wazuh-*"
                     allowed_actions:
                       - "indices_all"
+
+              kibana_wazuh_access:
+                reserved: false
+                cluster_permissions:
+                  - "cluster_monitor"
+                index_permissions:
+                  - index_patterns:
+                      - "wazuh-monitoring-*"
+                      - "wazuh-statistics-*"
+                      - "wazuh-alerts-*"
+                    allowed_actions:
+                      - "indices:admin/get"
+                      - "indices:admin/create"
+                      - "indices:admin/delete"
+                      - "indices:admin/settings/update"
+                      - "indices:admin/settings/get"
+                      - "indices:admin/mapping/put"
+                      - "indices:admin/mapping/get"
+                      - "indices:admin/mappings/fields/get"
+                      - "indices:data/read/get"
+                      - "indices:data/read/mget"
+                      - "indices:data/read/search"
+                      - "indices:data/write/index"
+                      - "indices:data/write/update"
+                      - "indices:data/write/bulk"
+                      - "indices:data/write/delete"
               EOF
-              fi
 
               # Remove leading whitespace from heredocs
               sed -i 's/^              //' /security-config/internal_users.yml
@@ -198,6 +334,14 @@ spec:
         - name: wazuh-indexer
           image: "{{ .Values.indexer.image.repository }}:{{ .Values.indexer.image.tag }}"
           imagePullPolicy: {{ .Values.indexer.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: indexer-rest
               containerPort: 9200

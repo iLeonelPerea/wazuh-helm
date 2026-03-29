@@ -16,6 +16,9 @@ spec:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.dashboard.selectorLabels" . | nindent 8 }}
       annotations:
+        {{- if .Values.vault.enabled }}
+        {{- include "wazuh.vaultAnnotations" . | nindent 8 }}
+        {{- end }}
         checksum/config: {{ include (print $.Template.BasePath "/dashboard/configmap.yaml") . | sha256sum }}
         {{- if .Values.dashboard.metrics.enabled }}
         prometheus.io/scrape: "true"
@@ -23,8 +26,17 @@ spec:
         prometheus.io/path: {{ .Values.dashboard.metrics.path | quote }}
         {{- end }}
     spec:
+      {{- if .Values.vault.enabled }}
+      serviceAccountName: {{ include "wazuh.fullname" . }}-vault
+      {{- else }}
+      serviceAccountName: default
+      {{- end }}
       {{- include "wazuh.dnsConfig" . | nindent 6 }}
       priorityClassName: {{ include "wazuh.fullname" . }}-critical
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.dashboard.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -38,11 +50,118 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        {{- if .Values.vault.enabled }}
+        - name: vault-bridge
+          image: "{{ .Values.global.initImages.kubectl.repository }}:{{ .Values.global.initImages.kubectl.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 65534
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "=== Creating K8s secrets from Vault files ==="
+              RELEASE="{{ include "wazuh.fullname" . }}"
+              NS="{{ .Release.Namespace }}"
+
+              INDEXER_USER=$(grep '^username=' /vault/secrets/indexer-credentials | cut -d= -f2)
+              INDEXER_PASS=$(grep '^password=' /vault/secrets/indexer-credentials | cut -d= -f2)
+              API_USER=$(grep '^username=' /vault/secrets/api-credentials | cut -d= -f2)
+              API_PASS=$(grep '^password=' /vault/secrets/api-credentials | cut -d= -f2)
+              DASH_PASS=$(grep '^password=' /vault/secrets/dashboard-credentials | cut -d= -f2)
+              FB_PASS=$(grep '^password=' /vault/secrets/filebeat-credentials | cut -d= -f2)
+
+              for var in INDEXER_USER INDEXER_PASS API_USER API_PASS DASH_PASS FB_PASS; do
+                eval val=\$$var
+                if [ -z "$val" ]; then echo "ERROR: $var empty"; exit 1; fi
+              done
+
+              kubectl create secret generic ${RELEASE}-indexer-credentials \
+                --from-literal=username="$INDEXER_USER" --from-literal=password="$INDEXER_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+              kubectl create secret generic ${RELEASE}-api-credentials \
+                --from-literal=username="$API_USER" --from-literal=password="$API_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+              kubectl create secret generic ${RELEASE}-dashboard-credentials \
+                --from-literal=password="$DASH_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+              kubectl create secret generic ${RELEASE}-filebeat-credentials \
+                --from-literal=password="$FB_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+
+              for s in indexer-credentials api-credentials dashboard-credentials filebeat-credentials; do
+                kubectl label secret ${RELEASE}-${s} -n $NS vault-source=true --overwrite 2>/dev/null || true
+              done
+              echo "=== Vault bridge complete ==="
+        {{- end }}
+        - name: wait-for-dependencies
+          image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for dependencies to be ready..."
+              MAX_ATTEMPTS=120
+              INDEXER_HOST="{{ include "wazuh.fullname" . }}-indexer.{{ .Release.Namespace }}.svc.cluster.local"
+              MANAGER_HOST="{{ include "wazuh.fullname" . }}-manager.{{ .Release.Namespace }}.svc.cluster.local"
+
+              # Wait for indexer:9200
+              echo "Checking indexer on $INDEXER_HOST:9200..."
+              ATTEMPT=0
+              while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                if nc -zw2 $INDEXER_HOST 9200 2>/dev/null; then
+                  echo "Indexer is ready!"
+                  break
+                fi
+                ATTEMPT=$((ATTEMPT + 1))
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Indexer not ready, retrying in 5s..."
+                sleep 5
+              done
+              if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+                echo "ERROR: Indexer did not become ready"
+                exit 1
+              fi
+
+              # Wait for manager:55000 (API port)
+              echo "Checking manager API on $MANAGER_HOST:55000..."
+              ATTEMPT=0
+              while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                if nc -zw2 $MANAGER_HOST 55000 2>/dev/null; then
+                  echo "Manager API is ready!"
+                  exit 0
+                fi
+                ATTEMPT=$((ATTEMPT + 1))
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Manager not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "ERROR: Manager did not become ready"
+              exit 1
         - name: inject-credentials
           image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
           securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
             capabilities:
               drop: ["ALL"]
           resources:
@@ -62,7 +181,7 @@ spec:
               if [ -n "$WAZUH_INDEXER_SERVICE_HOST" ]; then
                 sed -i "s|__INDEXER_HOST__|${WAZUH_INDEXER_SERVICE_HOST}|g" /config/opensearch_dashboards.yml
               fi
-              # Pre-create wazuh.yml so the entrypoint doesn't fail on permission denied
+              # Pre-create wazuh.yml with group-readable permissions (fsGroup=1000 ensures dashboard user can read)
               mkdir -p /wazuh-config
               {
                 echo 'hosts:'
@@ -73,6 +192,7 @@ spec:
                 printf '      password: "%s"\n' "$API_PASSWORD"
                 echo '      run_as: true'
               } > /wazuh-config/wazuh.yml
+              chmod 640 /wazuh-config/wazuh.yml
           env:
             - name: KIBANA_PASSWORD
               valueFrom:
@@ -103,6 +223,14 @@ spec:
         - name: wazuh-dashboard
           image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
           imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: dashboard
               containerPort: 5601

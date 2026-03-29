@@ -104,6 +104,12 @@ spec:
           volumeMounts:
             - name: shared
               mountPath: /shared
+        # NOTE: No wait-for-manager init container needed here.
+        # Wazuh agents have built-in resilience: they retry connection to manager
+        # indefinitely (5 attempts every 10s, then re-registration). Using an init
+        # container would block ALL agents on ALL nodes during manager downtime,
+        # creating a monitoring gap. Native retry is the recommended pattern per
+        # Wazuh documentation and community best practices.
       containers:
         - name: wazuh-agent
           image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}"

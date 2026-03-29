@@ -39,6 +39,25 @@ security:
     filebeat: ""
 
 # =============================================================================
+# Vault Agent Injector Integration
+# =============================================================================
+vault:
+  # -- Enable Vault Agent Injector for secret injection (false = use K8s Secrets)
+  enabled: false
+  # -- Vault server address
+  address: "http://vault.vault.svc.cluster.local:8200"
+  # -- Skip TLS verification (development only)
+  tlsSkipVerify: false
+  # -- Vault K8s auth role name
+  role: "wazuh"
+  # -- Vault KV v2 mount path
+  mount: "wazuh"
+  # -- Vault Agent resource limits
+  agentResources:
+    cpu: "250m"
+    memory: "128Mi"
+
+# =============================================================================
 # StorageClass
 # =============================================================================
 storageClass:
@@ -157,6 +176,22 @@ manager:
     enabled: true
     port: 55000
     path: "/metrics"
+  # -- Additional agent groups for cross-cluster agents
+  # Each group gets its own agent.conf pushed to agents in that group.
+  # The "default" group is auto-generated from the agent.* section above.
+  agentGroups:
+    internal-services:
+      labels:
+        account: "851725383384"
+        cluster: "kamet-internal-services"
+        environment: "internal"
+        region: "us-east-1"
+    prod:
+      labels:
+        account: "533267243705"
+        cluster: "kamet-prod"
+        environment: "production"
+        region: "us-east-1"
   # -- Node selector for manager pods
   nodeSelector: {}
   # -- Tolerations for manager pods

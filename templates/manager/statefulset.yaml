@@ -17,6 +17,9 @@ spec:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.manager.selectorLabels" . | nindent 8 }}
       annotations:
+        {{- if .Values.vault.enabled }}
+        {{- include "wazuh.vaultAnnotations" . | nindent 8 }}
+        {{- end }}
         {{- include "wazuh.checksumAnnotations" . | nindent 8 }}
         {{- if .Values.manager.metrics.enabled }}
         prometheus.io/scrape: "true"
@@ -25,12 +28,18 @@ spec:
         prometheus.io/scheme: "https"
         {{- end }}
     spec:
+      {{- if .Values.vault.enabled }}
+      serviceAccountName: {{ include "wazuh.fullname" . }}-vault
+      {{- else }}
       serviceAccountName: {{ include "wazuh.fullname" . }}-manager
+      {{- end }}
       {{- include "wazuh.dnsConfig" . | nindent 6 }}
       priorityClassName: {{ include "wazuh.fullname" . }}-critical
       terminationGracePeriodSeconds: {{ .Values.manager.terminationGracePeriodSeconds }}
       securityContext:
         fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.manager.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -44,11 +53,97 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        {{- if .Values.vault.enabled }}
+        - name: vault-bridge
+          image: "{{ .Values.global.initImages.kubectl.repository }}:{{ .Values.global.initImages.kubectl.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 65534
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "=== Creating K8s secrets from Vault files ==="
+              RELEASE="{{ include "wazuh.fullname" . }}"
+              NS="{{ .Release.Namespace }}"
+
+              INDEXER_USER=$(grep '^username=' /vault/secrets/indexer-credentials | cut -d= -f2)
+              INDEXER_PASS=$(grep '^password=' /vault/secrets/indexer-credentials | cut -d= -f2)
+              API_USER=$(grep '^username=' /vault/secrets/api-credentials | cut -d= -f2)
+              API_PASS=$(grep '^password=' /vault/secrets/api-credentials | cut -d= -f2)
+              DASH_PASS=$(grep '^password=' /vault/secrets/dashboard-credentials | cut -d= -f2)
+              FB_PASS=$(grep '^password=' /vault/secrets/filebeat-credentials | cut -d= -f2)
+
+              for var in INDEXER_USER INDEXER_PASS API_USER API_PASS DASH_PASS FB_PASS; do
+                eval val=\$$var
+                if [ -z "$val" ]; then echo "ERROR: $var empty"; exit 1; fi
+              done
+
+              kubectl create secret generic ${RELEASE}-indexer-credentials \
+                --from-literal=username="$INDEXER_USER" --from-literal=password="$INDEXER_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+              kubectl create secret generic ${RELEASE}-api-credentials \
+                --from-literal=username="$API_USER" --from-literal=password="$API_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+              kubectl create secret generic ${RELEASE}-dashboard-credentials \
+                --from-literal=password="$DASH_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+              kubectl create secret generic ${RELEASE}-filebeat-credentials \
+                --from-literal=password="$FB_PASS" \
+                -n $NS --dry-run=client -o yaml | kubectl apply -f -
+
+              for s in indexer-credentials api-credentials dashboard-credentials filebeat-credentials; do
+                kubectl label secret ${RELEASE}-${s} -n $NS vault-source=true --overwrite 2>/dev/null || true
+              done
+              echo "=== Vault bridge complete ==="
+        {{- end }}
+        - name: wait-for-indexer
+          image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for indexer to be ready on port 9200..."
+              MAX_ATTEMPTS=120
+              ATTEMPT=0
+              INDEXER_HOST="{{ include "wazuh.fullname" . }}-indexer.{{ .Release.Namespace }}.svc.cluster.local"
+              while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                if nc -zw2 $INDEXER_HOST 9200 2>/dev/null; then
+                  echo "Indexer is ready!"
+                  exit 0
+                fi
+                ATTEMPT=$((ATTEMPT + 1))
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Indexer not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "ERROR: Indexer did not become ready after 600 seconds"
+              exit 1
         - name: inject-filebeat-config
           image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
           securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
             capabilities:
               drop: ["ALL"]
           resources:
@@ -79,8 +174,21 @@ spec:
           image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
           imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
           securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
             capabilities:
-              add: ["SYS_CHROOT"]
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - FOWNER
+                - KILL
+                - NET_BIND_SERVICE
+                - NET_RAW
+                - SETGID
+                - SETUID
+                - SYS_CHROOT
           ports:
             - name: agents-events
               containerPort: 1514
@@ -153,11 +261,23 @@ spec:
                       [ -d /var/ossec/etc/shared/default ] && break
                       sleep 2
                     done
+                    {{- if .Values.agent.enabled }}
                     # Copy SIEM-only agent.conf from ConfigMap
                     if [ -f /tmp/shared-config/agent.conf ]; then
                       cp /tmp/shared-config/agent.conf /var/ossec/etc/shared/default/agent.conf
                       chown wazuh:wazuh /var/ossec/etc/shared/default/agent.conf 2>/dev/null || true
                     fi
+                    {{- end }}
+                    {{- if .Values.manager.agentGroups }}
+                    # Create agent group directories and copy configs
+                    {{- range $groupName, $groupConfig := .Values.manager.agentGroups }}
+                    mkdir -p /var/ossec/etc/shared/{{ $groupName }}
+                    if [ -f /tmp/agent-groups/{{ $groupName }}-agent.conf ]; then
+                      cp /tmp/agent-groups/{{ $groupName }}-agent.conf /var/ossec/etc/shared/{{ $groupName }}/agent.conf
+                      chown -R wazuh:wazuh /var/ossec/etc/shared/{{ $groupName }} 2>/dev/null || true
+                    fi
+                    {{- end }}
+                    {{- end }}
                     # Apply ossec.conf customizations (persisted on PVC)
                     CONF=/var/ossec/etc/ossec.conf
                     {{- if ne .Values.manager.feedUpdateInterval "60m" }}
@@ -227,7 +347,7 @@ spec:
           readinessProbe:
             tcpSocket:
               port: agents-events
-            initialDelaySeconds: 30
+            initialDelaySeconds: 45
             periodSeconds: 15
             timeoutSeconds: 5
           livenessProbe:
@@ -262,18 +382,27 @@ spec:
               mountPath: /etc/ssl/filebeat-key.pem
               subPath: filebeat-key.pem
               readOnly: true
+            {{- if .Values.agent.enabled }}
             - name: shared-config
               mountPath: /tmp/shared-config
               readOnly: true
+            {{- end }}
             - name: filebeat-config
               mountPath: /etc/filebeat
             - name: manager-config
               mountPath: /tmp/manager-config
               readOnly: true
+            {{- if .Values.manager.agentGroups }}
+            - name: agent-groups-config
+              mountPath: /tmp/agent-groups
+              readOnly: true
+            {{- end }}
         {{- if .Values.s3.enabled }}
         - name: s3-sync
           image: "{{ .Values.s3.image.repository }}:{{ .Values.s3.image.tag }}"
           securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
@@ -317,14 +446,21 @@ spec:
         - name: filebeat-certs
           secret:
             secretName: {{ include "wazuh.fullname" . }}-filebeat-certs
+        {{- if .Values.agent.enabled }}
         - name: shared-config
           configMap:
             name: {{ include "wazuh.fullname" . }}-manager-shared
+        {{- end }}
         - name: manager-config
           configMap:
             name: {{ include "wazuh.fullname" . }}-manager-config
         - name: filebeat-config
           emptyDir: {}
+        {{- if .Values.manager.agentGroups }}
+        - name: agent-groups-config
+          configMap:
+            name: {{ include "wazuh.fullname" . }}-agent-groups
+        {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: wazuh-manager-data
