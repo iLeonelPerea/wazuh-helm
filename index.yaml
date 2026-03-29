@@ -3,6 +3,71 @@ entries:
   wazuh:
   - annotations:
       artifacthub.io/changes: |
+        - kind: security
+          description: "seccompProfile RuntimeDefault on all pods"
+        - kind: security
+          description: "Drop ALL capabilities on every container with minimal per-component adds"
+        - kind: security
+          description: "allowPrivilegeEscalation false on all containers"
+        - kind: security
+          description: "wazuh.yml chmod 640 prevents duplicate hosts key crash"
+        - kind: added
+          description: "Ordered startup via init containers (Indexer → Manager → Dashboard)"
+        - kind: added
+          description: "wait-for-indexer init container on Manager (TCP 9200)"
+        - kind: added
+          description: "wait-for-dependencies init container on Dashboard (TCP 9200 + 55000)"
+        - kind: added
+          description: "Vault Agent Injector integration as toggleable feature (vault.enabled)"
+        - kind: added
+          description: "vault-bridge init container for Vault-to-K8s-Secret sync"
+        - kind: added
+          description: "kibana_wazuh_access role and mapping for dashboard index access"
+        - kind: added
+          description: "Rebuild index script for Helm repository recovery"
+        - kind: changed
+          description: "Agents use native Wazuh retry instead of init container wait"
+        - kind: changed
+          description: "Manager readiness probe initialDelaySeconds 30 to 45"
+        - kind: changed
+          description: "Release workflow regenerates index.yaml from scratch (no merge)"
+        - kind: fixed
+          description: "serviceAccountName fallback for dashboard/indexer when Vault disabled"
+        - kind: fixed
+          description: "Template permissions added to manage_wazuh_index role"
+      artifacthub.io/license: MIT
+      artifacthub.io/signKey: ""
+    apiVersion: v2
+    appVersion: 4.14.4
+    created: "2026-03-29T20:59:44.227652166Z"
+    description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
+      for EKS Auto Mode)
+    digest: ffdb8eb63eda1f4350db64ffd882d673d1cfca2a0182a4a81aa5f85100599794
+    home: https://github.com/ileonelperea/wazuh-helm
+    icon: https://wazuh.com/uploads/2022/05/WAZUH.png
+    keywords:
+    - wazuh
+    - siem
+    - security
+    - monitoring
+    - opensearch
+    - eks
+    - kubernetes
+    - threat-detection
+    - vulnerability-detection
+    maintainers:
+    - name: ileonelperea
+      url: https://github.com/ileonelperea
+    name: wazuh
+    sources:
+    - https://github.com/ileonelperea/wazuh-helm
+    - https://documentation.wazuh.com/
+    type: application
+    urls:
+    - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-1.1.0.tgz
+    version: 1.1.0
+  - annotations:
+      artifacthub.io/changes: |
         - kind: added
           description: 3-node OpenSearch cluster with quorum and parallel bootstrap
         - kind: added
@@ -41,7 +106,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T18:48:17.230227-06:00"
+    created: "2026-03-29T20:59:44.22528293Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c9ee608c221842e31bc8aecb0bb36cbaa7add99c8fcc9d840db6d35f732a3ab9
@@ -70,7 +135,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T18:48:17.229257-06:00"
+    created: "2026-03-29T20:59:44.2238598Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
@@ -99,7 +164,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-03-23T18:48:17.228239-06:00"
+    created: "2026-03-29T20:59:44.222416011Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
@@ -126,4 +191,4 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-03-23T18:48:17.227214-06:00"
+generated: "2026-03-29T20:59:44.221058653Z"
