@@ -39,6 +39,45 @@ security:
     filebeat: ""
 
 # =============================================================================
+# Reloader (Stakater) - Auto-restart pods on Secret/ConfigMap changes
+# =============================================================================
+reloader:
+  # -- Enable Reloader annotations on workloads (requires Stakater Reloader installed)
+  enabled: false
+
+# =============================================================================
+# Credential Rotation CronJob
+# =============================================================================
+credentialRotation:
+  # -- Enable automatic credential rotation CronJob
+  enabled: false
+  # -- Cron schedule (default: annually on Jan 1st at 2am UTC)
+  schedule: "0 2 1 1 *"
+  # -- Mode: "vault" writes new passwords to Vault KV (requires vault.enabled=true + ESO)
+  # "kubernetes" updates K8s Secrets directly via kubectl
+  mode: "vault"
+  # -- Vault KV v2 mount path for credential storage (only used when mode=vault)
+  vaultMount: "wazuh"
+  # -- Wait time in seconds for ESO to sync after Vault update (only used when mode=vault)
+  esoSyncWaitSeconds: 90
+  # -- Verify OpenSearch cluster health after rotation
+  healthCheck:
+    enabled: true
+    # -- Max seconds to wait for cluster GREEN status
+    timeoutSeconds: 300
+  # -- Container image for the rotation job
+  image:
+    repository: public.ecr.aws/bitnami/kubectl
+    tag: "1.32"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# =============================================================================
 # Vault Agent Injector Integration
 # =============================================================================
 vault:

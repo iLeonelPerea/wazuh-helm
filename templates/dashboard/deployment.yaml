@@ -5,6 +5,10 @@ metadata:
   labels:
     {{- include "wazuh.labels" . | nindent 4 }}
     {{- include "wazuh.dashboard.selectorLabels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
 spec:
   replicas: {{ .Values.dashboard.replicas }}
   selector:
@@ -67,7 +71,13 @@ spec:
             - /bin/sh
             - -c
             - |
-              echo "=== Creating K8s secrets from Vault files ==="
+              echo "=== Vault bridge: syncing secrets ==="
+              if [ ! -d /vault/secrets ] || [ $(ls /vault/secrets/ 2>/dev/null | wc -l) -eq 0 ]; then
+                echo "INFO: Vault Agent files not found — assuming ESO manages K8s Secrets"
+                echo "=== Vault bridge: skipped (ESO mode) ==="
+                exit 0
+              fi
+
               RELEASE="{{ include "wazuh.fullname" . }}"
               NS="{{ .Release.Namespace }}"
 

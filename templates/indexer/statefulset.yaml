@@ -5,6 +5,10 @@ metadata:
   labels:
     {{- include "wazuh.labels" . | nindent 4 }}
     {{- include "wazuh.indexer.selectorLabels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
 spec:
   serviceName: {{ include "wazuh.fullname" . }}-indexer
   replicas: {{ .Values.indexer.replicas }}
@@ -74,8 +78,14 @@ spec:
             - /bin/sh
             - -c
             - |
-              echo "=== Creating temporary K8s secrets from Vault files ==="
-              # Read indexer credentials
+              echo "=== Vault bridge: syncing secrets ==="
+              # Check if Vault Agent Injector populated files
+              if [ ! -d /vault/secrets ] || [ $(ls /vault/secrets/ 2>/dev/null | wc -l) -eq 0 ]; then
+                echo "INFO: Vault Agent files not found — assuming ESO manages K8s Secrets"
+                echo "=== Vault bridge: skipped (ESO mode) ==="
+                exit 0
+              fi
+
               INDEXER_USER=$(grep '^username=' /vault/secrets/indexer-credentials | cut -d= -f2)
               INDEXER_PASS=$(grep '^password=' /vault/secrets/indexer-credentials | cut -d= -f2)
               API_USER=$(grep '^username=' /vault/secrets/api-credentials | cut -d= -f2)
@@ -83,17 +93,14 @@ spec:
               DASH_PASS=$(grep '^password=' /vault/secrets/dashboard-credentials | cut -d= -f2)
               FB_PASS=$(grep '^password=' /vault/secrets/filebeat-credentials | cut -d= -f2)
 
-              # Validate all passwords were read
               for var in INDEXER_USER INDEXER_PASS API_USER API_PASS DASH_PASS FB_PASS; do
                 eval val=\$$var
                 if [ -z "$val" ]; then
-                  echo "ERROR: Failed to read $var from Vault files"
-                  ls -la /vault/secrets/
+                  echo "ERROR: $var is empty — check Vault Agent Injector logs"
                   exit 1
                 fi
               done
 
-              # Create/update temp secrets with label for cleanup
               RELEASE="{{ include "wazuh.fullname" . }}"
               NS="{{ .Release.Namespace }}"
 
@@ -115,14 +122,13 @@ spec:
                 --from-literal=password="$FB_PASS" \
                 -n $NS --dry-run=client -o yaml | kubectl apply -f -
 
-              # Label all temp secrets
               for secret in indexer-credentials api-credentials dashboard-credentials filebeat-credentials; do
                 kubectl label secret ${RELEASE}-${secret} -n $NS \
                   app.kubernetes.io/managed-by=vault-bridge \
                   vault-source=true --overwrite 2>/dev/null || true
               done
 
-              echo "=== Vault bridge complete: 4 secrets created ==="
+              echo "=== Vault bridge complete: 4 secrets synced ==="
         {{- end }}
         - name: volume-permissions
           image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
@@ -160,7 +166,6 @@ spec:
               cpu: 100m
               memory: 64Mi
           env:
-            {{- if not .Values.vault.enabled }}
             - name: ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -176,26 +181,17 @@ spec:
                 secretKeyRef:
                   name: {{ include "wazuh.filebeatSecretName" . }}
                   key: password
-            {{- else }}
-            - name: VAULT_ENABLED
-              value: "true"
-            {{- end }}
           command:
             - /bin/bash
             - -c
             - |
               echo "=== Preparing security config ==="
-              {{- if .Values.vault.enabled }}
-              # Read passwords from Vault-injected files
-              ADMIN_PASSWORD=$(grep '^password=' /vault/secrets/indexer-credentials | cut -d= -f2)
-              KIBANA_PASSWORD=$(grep '^password=' /vault/secrets/dashboard-credentials | cut -d= -f2)
-              FILEBEAT_PASSWORD=$(grep '^password=' /vault/secrets/filebeat-credentials | cut -d= -f2)
+              # Passwords always come from K8s Secret env vars
+              # (populated by ESO, vault-bridge, or Helm-created secrets)
               if [ -z "$ADMIN_PASSWORD" ] || [ -z "$KIBANA_PASSWORD" ] || [ -z "$FILEBEAT_PASSWORD" ]; then
-                echo "ERROR: Failed to read passwords from Vault files"
+                echo "ERROR: Password env vars not set — check K8s Secrets exist"
                 exit 1
               fi
-              echo "Passwords loaded from Vault files"
-              {{- end }}
               export JAVA_HOME=/usr/share/wazuh-indexer/jdk
               export PATH=$JAVA_HOME/bin:$PATH
               HASH_TOOL="/usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh"

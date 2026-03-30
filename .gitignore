@@ -1,5 +1,6 @@
 # Claude Code
 .claude/
+CLAUDE.md
 
 # Environment-specific values (contain passwords and infrastructure details)
 values-dev.yaml
@@ -27,3 +28,4 @@ charts/
 # Temporary files
 *.tmp
 *.bak
+SECURITY_AUDIT_REPORT.txt
