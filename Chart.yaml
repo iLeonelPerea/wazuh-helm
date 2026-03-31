@@ -2,7 +2,7 @@ apiVersion: v2
 name: wazuh
 description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO integration (optimized for EKS Auto Mode)
 type: application
-version: 1.2.1
+version: 1.2.2
 appVersion: "4.14.4"
 home: https://github.com/ileonelperea/wazuh-helm
 sources:

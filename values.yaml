@@ -68,10 +68,10 @@ credentialRotation:
     enabled: true
     # -- Max seconds to wait for cluster GREEN status
     timeoutSeconds: 300
-  # -- Container image for the rotation job
+  # -- Container image for the rotation job (alpine with curl+kubectl installed at runtime)
   image:
-    repository: public.ecr.aws/bitnami/kubectl
-    tag: "1.32"
+    repository: public.ecr.aws/docker/library/alpine
+    tag: "3.19"
   resources:
     requests:
       cpu: 100m

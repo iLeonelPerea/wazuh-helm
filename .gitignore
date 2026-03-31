@@ -29,3 +29,7 @@ charts/
 *.tmp
 *.bak
 SECURITY_AUDIT_REPORT.txt
+
+# Sensitive files (NEVER commit)
+vault-root-token*.json
+*.plugin
