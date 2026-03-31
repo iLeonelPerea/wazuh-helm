@@ -2,7 +2,7 @@ apiVersion: v2
 name: wazuh
 description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO integration (optimized for EKS Auto Mode)
 type: application
-version: 1.2.0
+version: 1.2.1
 appVersion: "4.14.4"
 home: https://github.com/ileonelperea/wazuh-helm
 sources:
@@ -24,6 +24,14 @@ keywords:
 icon: https://wazuh.com/uploads/2022/05/WAZUH.png
 annotations:
   artifacthub.io/changes: |
+    - kind: changed
+      description: "Move bootstrapToken inside vault.bootstrap section (breaking: vault.bootstrapToken → vault.bootstrap.bootstrapToken)"
+    - kind: added
+      description: "vault.readAdminPasswordFromVault flag — bootstrap job reads admin password from Vault KV"
+    - kind: added
+      description: "Credential rotation CronJob with Vault mode reads adminPassword from Vault"
+    - kind: security
+      description: "Bootstrap job conditional — disabled after first install eliminates need for persistent high-privilege tokens"
     - kind: added
       description: "External Secrets Operator (ESO) integration with ClusterSecretStore for Vault"
     - kind: added

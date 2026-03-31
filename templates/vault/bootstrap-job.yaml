@@ -10,7 +10,7 @@ metadata:
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
 spec:
   backoffLimit: 3
   ttlSecondsAfterFinished: 3600
@@ -54,15 +54,19 @@ spec:
               value: {{ .Release.Namespace | quote }}
             - name: WAZUH_SA
               value: {{ .Values.vault.serviceAccount | quote }}
+            - name: READ_ADMIN_FROM_VAULT
+              value: {{ .Values.vault.readAdminPasswordFromVault | quote }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
             - name: vault-token
               mountPath: /var/run/secrets/vault
               readOnly: true
+            {{- if not .Values.vault.readAdminPasswordFromVault }}
             - name: admin-password
               mountPath: /var/run/secrets/wazuh
               readOnly: true
+            {{- end }}
           command:
             - /bin/sh
             - -c
@@ -71,8 +75,21 @@ spec:
 
               # Read secrets from mounted files (never exposed as env vars)
               VAULT_TOKEN=$(cat /var/run/secrets/vault/token)
-              export VAULT_TOKEN
-              ADMIN_PASSWORD=$(cat /var/run/secrets/wazuh/password)
+              # Read admin password from either mounted Secret or Vault KV
+              if [ "$READ_ADMIN_FROM_VAULT" = "true" ]; then
+                echo "Reading admin password from Vault KV..."
+                VAULT_RESP=$(vault_api GET "$VAULT_MOUNT/data/admin-password")
+                ADMIN_PASSWORD=$(echo "$VAULT_RESP" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p')
+                if [ -z "$ADMIN_PASSWORD" ]; then
+                  echo "ERROR: Could not read admin password from Vault at $VAULT_MOUNT/data/admin-password"
+                  echo "Make sure to seed it first: vault kv put $VAULT_MOUNT/admin-password value=YOUR_PASSWORD (KV v2 API path: $VAULT_MOUNT/data/admin-password)"
+                  exit 1
+                fi
+                echo "Admin password read from Vault"
+              else
+                ADMIN_PASSWORD=$(cat /var/run/secrets/wazuh/password)
+                echo "Admin password read from Helm values"
+              fi
 
               echo "======================================================"
               echo "=== Wazuh Vault Bootstrap ==="
@@ -232,10 +249,12 @@ spec:
             items:
               - key: token
                 path: token
+        {{- if not .Values.vault.readAdminPasswordFromVault }}
         - name: admin-password
           secret:
             secretName: {{ include "wazuh.fullname" . }}-vault-bootstrap-password
             items:
               - key: adminPassword
                 path: password
+        {{- end }}
 {{- end }}

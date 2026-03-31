@@ -22,6 +22,9 @@ global:
 # =============================================================================
 security:
   # -- Admin password for the Wazuh Dashboard login (CHANGE THIS in production)
+  # When vault.enabled=true and vault.readAdminPasswordFromVault=true:
+  # This field is ignored — password is read from Vault KV at {vault.mount}/admin-password
+  # After first bootstrap, you can remove this from your values file
   adminPassword: "SecurePassword123!"
   # -- Internal passwords (auto-generated on first install, reused on upgrades)
   # These are used for internal service communication and should NOT be changed manually.
@@ -103,16 +106,24 @@ vault:
   serviceAccount: "wazuh-vault-auth"
   # -- Namespace where Vault is deployed
   namespace: "vault"
-  # -- Bootstrap token for initial Vault setup (required on first install)
-  # In dev mode Vault this is "root". For production, create a token with appropriate policy.
-  bootstrapToken: ""
   # -- ExternalSecrets refresh interval
   refreshInterval: "1h"
   # -- Deletion policy for K8s Secrets managed by ESO: Retain or Delete
   deletionPolicy: "Retain"
+  # -- Read adminPassword from Vault KV instead of Helm values
+  # When true: bootstrap job reads admin password from Vault KV at {mount}/admin-password
+  # When false (default): uses security.adminPassword from values
+  # Only relevant when bootstrap.enabled=true
+  readAdminPasswordFromVault: false
   # -- Bootstrap job configuration
   bootstrap:
+    # -- Enable the Vault bootstrap job (seeds KV, configures K8s auth, creates policy)
+    # Set to false after first successful install — re-enable only for credential rotation
     enabled: true
+    # -- Vault token with permissions to seed KV and configure K8s auth
+    # Only required when bootstrap.enabled=true
+    # Generate with: vault token create -policy=wazuh-bootstrap -ttl=24h
+    bootstrapToken: ""
     image:
       repository: public.ecr.aws/docker/library/alpine
       tag: "3.19"
