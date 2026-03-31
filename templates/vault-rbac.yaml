@@ -1,4 +1,6 @@
 {{- if .Values.vault.enabled }}
+# DEPRECATED in v1.2.0: vault-bridge init containers replaced by ExternalSecrets.
+# This RBAC kept for backward compatibility. Will be removed in v2.0.0.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

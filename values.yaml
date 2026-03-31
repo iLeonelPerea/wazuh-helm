@@ -78,23 +78,51 @@ credentialRotation:
       memory: 256Mi
 
 # =============================================================================
-# Vault Agent Injector Integration
+# Vault & External Secrets Operator (ESO) Integration
 # =============================================================================
+# When vault.enabled=true:
+# - Chart creates ClusterSecretStore (ESO → Vault connection)
+# - Chart creates 4 ExternalSecret resources (pull credentials from Vault)
+# - Vault bootstrap job auto-configures KV v2, K8s auth, policy, role
+# - Credentials stored in K8s Secrets (same names as vault.enabled=false)
+# Prerequisites: ESO must be pre-installed in cluster
 vault:
-  # -- Enable Vault Agent Injector for secret injection (false = use K8s Secrets)
+  # -- Enable Vault integration with External Secrets Operator (ESO)
   enabled: false
   # -- Vault server address
   address: "http://vault.vault.svc.cluster.local:8200"
   # -- Skip TLS verification (development only)
   tlsSkipVerify: false
-  # -- Vault K8s auth role name
+  # -- Vault K8s auth role name (auto-created by bootstrap job)
   role: "wazuh"
-  # -- Vault KV v2 mount path
+  # -- Vault KV v2 mount path (auto-enabled by bootstrap job)
   mount: "wazuh"
-  # -- Vault Agent resource limits
-  agentResources:
-    cpu: "250m"
-    memory: "128Mi"
+  # -- Vault K8s auth path
+  authPath: "kubernetes"
+  # -- ServiceAccount for ESO Vault auth
+  serviceAccount: "wazuh-vault-auth"
+  # -- Namespace where Vault is deployed
+  namespace: "vault"
+  # -- Bootstrap token for initial Vault setup (required on first install)
+  # In dev mode Vault this is "root". For production, create a token with appropriate policy.
+  bootstrapToken: ""
+  # -- ExternalSecrets refresh interval
+  refreshInterval: "1h"
+  # -- Deletion policy for K8s Secrets managed by ESO: Retain or Delete
+  deletionPolicy: "Retain"
+  # -- Bootstrap job configuration
+  bootstrap:
+    enabled: true
+    image:
+      repository: public.ecr.aws/docker/library/alpine
+      tag: "3.19"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
 
 # =============================================================================
 # StorageClass

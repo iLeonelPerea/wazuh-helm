@@ -21,9 +21,6 @@ spec:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.manager.selectorLabels" . | nindent 8 }}
       annotations:
-        {{- if .Values.vault.enabled }}
-        {{- include "wazuh.vaultAnnotations" . | nindent 8 }}
-        {{- end }}
         {{- include "wazuh.checksumAnnotations" . | nindent 8 }}
         {{- if .Values.manager.metrics.enabled }}
         prometheus.io/scrape: "true"
@@ -32,11 +29,7 @@ spec:
         prometheus.io/scheme: "https"
         {{- end }}
     spec:
-      {{- if .Values.vault.enabled }}
-      serviceAccountName: {{ include "wazuh.fullname" . }}-vault
-      {{- else }}
       serviceAccountName: {{ include "wazuh.fullname" . }}-manager
-      {{- end }}
       {{- include "wazuh.dnsConfig" . | nindent 6 }}
       priorityClassName: {{ include "wazuh.fullname" . }}-critical
       terminationGracePeriodSeconds: {{ .Values.manager.terminationGracePeriodSeconds }}
@@ -57,62 +50,6 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
-        {{- if .Values.vault.enabled }}
-        - name: vault-bridge
-          image: "{{ .Values.global.initImages.kubectl.repository }}:{{ .Values.global.initImages.kubectl.tag }}"
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsUser: 65534
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 100m
-              memory: 128Mi
-          command:
-            - /bin/sh
-            - -c
-            - |
-              echo "=== Vault bridge: syncing secrets ==="
-              if [ ! -d /vault/secrets ] || [ $(ls /vault/secrets/ 2>/dev/null | wc -l) -eq 0 ]; then
-                echo "INFO: Vault Agent files not found — assuming ESO manages K8s Secrets"
-                echo "=== Vault bridge: skipped (ESO mode) ==="
-                exit 0
-              fi
-              RELEASE="{{ include "wazuh.fullname" . }}"
-              NS="{{ .Release.Namespace }}"
-
-              INDEXER_USER=$(grep '^username=' /vault/secrets/indexer-credentials | cut -d= -f2)
-              INDEXER_PASS=$(grep '^password=' /vault/secrets/indexer-credentials | cut -d= -f2)
-              API_USER=$(grep '^username=' /vault/secrets/api-credentials | cut -d= -f2)
-              API_PASS=$(grep '^password=' /vault/secrets/api-credentials | cut -d= -f2)
-              DASH_PASS=$(grep '^password=' /vault/secrets/dashboard-credentials | cut -d= -f2)
-              FB_PASS=$(grep '^password=' /vault/secrets/filebeat-credentials | cut -d= -f2)
-
-              for var in INDEXER_USER INDEXER_PASS API_USER API_PASS DASH_PASS FB_PASS; do
-                eval val=\$$var
-                if [ -z "$val" ]; then echo "ERROR: $var empty"; exit 1; fi
-              done
-
-              kubectl create secret generic ${RELEASE}-indexer-credentials \
-                --from-literal=username="$INDEXER_USER" --from-literal=password="$INDEXER_PASS" \
-                -n $NS --dry-run=client -o yaml | kubectl apply -f -
-              kubectl create secret generic ${RELEASE}-api-credentials \
-                --from-literal=username="$API_USER" --from-literal=password="$API_PASS" \
-                -n $NS --dry-run=client -o yaml | kubectl apply -f -
-              kubectl create secret generic ${RELEASE}-dashboard-credentials \
-                --from-literal=password="$DASH_PASS" \
-                -n $NS --dry-run=client -o yaml | kubectl apply -f -
-              kubectl create secret generic ${RELEASE}-filebeat-credentials \
-                --from-literal=password="$FB_PASS" \
-                -n $NS --dry-run=client -o yaml | kubectl apply -f -
-
-              for s in indexer-credentials api-credentials dashboard-credentials filebeat-credentials; do
-                kubectl label secret ${RELEASE}-${s} -n $NS vault-source=true --overwrite 2>/dev/null || true
-              done
-              echo "=== Vault bridge complete ==="
-        {{- end }}
         - name: wait-for-indexer
           image: "{{ .Values.global.initImages.busybox.repository }}:{{ .Values.global.initImages.busybox.tag }}"
           securityContext:

@@ -1,8 +1,8 @@
 apiVersion: v2
 name: wazuh
-description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized for EKS Auto Mode)
+description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO integration (optimized for EKS Auto Mode)
 type: application
-version: 1.1.1
+version: 1.2.0
 appVersion: "4.14.4"
 home: https://github.com/ileonelperea/wazuh-helm
 sources:
@@ -24,6 +24,22 @@ keywords:
 icon: https://wazuh.com/uploads/2022/05/WAZUH.png
 annotations:
   artifacthub.io/changes: |
+    - kind: added
+      description: "External Secrets Operator (ESO) integration with ClusterSecretStore for Vault"
+    - kind: added
+      description: "4 ExternalSecret resources (indexer, api, dashboard, filebeat credentials)"
+    - kind: added
+      description: "Vault bootstrap job auto-configures KV v2, K8s auth, policy, role"
+    - kind: added
+      description: "vault.bootstrap section with image, tag, resources configuration"
+    - kind: added
+      description: "vault.serviceAccount, vault.refreshInterval, vault.deletionPolicy for ESO"
+    - kind: changed
+      description: "vault section replaces Agent Injector (vault-bridge) with ESO workflow"
+    - kind: removed
+      description: "vault.agentResources removed (replaced by bootstrap.resources)"
+    - kind: removed
+      description: "Vault Agent Injector integration (vault-bridge) superseded by ESO"
     - kind: fixed
       description: "Remove artifacthub.io/signKey empty annotation that silently blocked version tracking"
     - kind: added
@@ -36,16 +52,24 @@ annotations:
       description: "allowPrivilegeEscalation false on all containers"
     - kind: security
       description: "wazuh.yml chmod 640 prevents duplicate hosts key crash"
+    - kind: security
+      description: "Bootstrap secrets mounted as files instead of env vars (prevents kubectl describe exposure)"
+    - kind: security
+      description: "Conditional TLS verification in bootstrap job based on vault.tlsSkipVerify"
+    - kind: security
+      description: "Bootstrap secrets auto-cleaned after hook completion (hook-delete-policy)"
+    - kind: security
+      description: "Rotation RBAC scoped to vault namespace only (no cluster-wide pods/exec)"
+    - kind: added
+      description: "Credential rotation CronJob with Vault mode and ESO force-sync"
+    - kind: added
+      description: "Active ESO polling replaces blind sleep during credential rotation"
     - kind: added
       description: "Ordered startup via init containers (Indexer → Manager → Dashboard)"
     - kind: added
       description: "wait-for-indexer init container on Manager (TCP 9200)"
     - kind: added
       description: "wait-for-dependencies init container on Dashboard (TCP 9200 + 55000)"
-    - kind: added
-      description: "Vault Agent Injector integration as toggleable feature (vault.enabled)"
-    - kind: added
-      description: "vault-bridge init container for Vault-to-K8s-Secret sync"
     - kind: added
       description: "kibana_wazuh_access role and mapping for dashboard index access"
     - kind: added

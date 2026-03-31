@@ -148,51 +148,19 @@ checksum/agent-groups: {{ include (print $.Template.BasePath "/manager/configmap
 {{- end }}
 
 {{/*
-Vault Agent Injector annotations - shared across all workloads
-Injects 4 credential files from Vault KV v2
+DEPRECATED v1.2.0: Vault Agent Injector annotations removed.
+ESO (External Secrets Operator) now handles secret sync.
+Kept as empty define for backward compatibility.
 */}}
 {{- define "wazuh.vaultAnnotations" -}}
-{{- if .Values.vault.enabled }}
-vault.hashicorp.com/agent-inject: "true"
-vault.hashicorp.com/agent-init-first: "true"
-vault.hashicorp.com/role: {{ .Values.vault.role | quote }}
-vault.hashicorp.com/agent-pre-populate-only: "true"
-vault.hashicorp.com/agent-limits-cpu: {{ .Values.vault.agentResources.cpu | quote }}
-vault.hashicorp.com/agent-limits-mem: {{ .Values.vault.agentResources.memory | quote }}
-vault.hashicorp.com/agent-inject-secret-indexer-credentials: "{{ .Values.vault.mount }}/data/indexer-credentials"
-vault.hashicorp.com/agent-inject-template-indexer-credentials: |
-  {{`{{- with secret `}}"{{ .Values.vault.mount }}/data/indexer-credentials"{{` -}}`}}
-  {{`username={{ .Data.data.username }}`}}
-  {{`password={{ .Data.data.password }}`}}
-  {{`{{- end }}`}}
-vault.hashicorp.com/agent-inject-secret-api-credentials: "{{ .Values.vault.mount }}/data/api-credentials"
-vault.hashicorp.com/agent-inject-template-api-credentials: |
-  {{`{{- with secret `}}"{{ .Values.vault.mount }}/data/api-credentials"{{` -}}`}}
-  {{`username={{ .Data.data.username }}`}}
-  {{`password={{ .Data.data.password }}`}}
-  {{`{{- end }}`}}
-vault.hashicorp.com/agent-inject-secret-dashboard-credentials: "{{ .Values.vault.mount }}/data/dashboard-credentials"
-vault.hashicorp.com/agent-inject-template-dashboard-credentials: |
-  {{`{{- with secret `}}"{{ .Values.vault.mount }}/data/dashboard-credentials"{{` -}}`}}
-  {{`password={{ .Data.data.password }}`}}
-  {{`{{- end }}`}}
-vault.hashicorp.com/agent-inject-secret-filebeat-credentials: "{{ .Values.vault.mount }}/data/filebeat-credentials"
-vault.hashicorp.com/agent-inject-template-filebeat-credentials: |
-  {{`{{- with secret `}}"{{ .Values.vault.mount }}/data/filebeat-credentials"{{` -}}`}}
-  {{`password={{ .Data.data.password }}`}}
-  {{`{{- end }}`}}
-{{- if .Values.vault.tlsSkipVerify }}
-vault.hashicorp.com/tls-skip-verify: "true"
-{{- end }}
-{{- end }}
 {{- end }}
 
 {{/*
-ServiceAccount name - returns vault SA or default
+Vault ESO ServiceAccount name
 */}}
-{{- define "wazuh.serviceAccountName" -}}
+{{- define "wazuh.vaultServiceAccountName" -}}
 {{- if .Values.vault.enabled -}}
-{{ include "wazuh.fullname" . }}-vault
+{{ .Values.vault.serviceAccount }}
 {{- else -}}
 default
 {{- end -}}
