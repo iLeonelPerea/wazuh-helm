@@ -1,3 +1,4 @@
+{{- if .Values.manager.enabled }}
 {{- if .Values.manager.agentGroups }}
 apiVersion: v1
 kind: ConfigMap
@@ -79,4 +80,5 @@ data:
 
     </agent_config>
   {{- end }}
+{{- end }}
 {{- end }}

@@ -1,4 +1,7 @@
 {{- if .Values.agent.enabled }}
+{{- if and (not .Values.manager.enabled) (not .Values.agent.externalManagerAddress) }}
+{{- fail "agent.externalManagerAddress is required when manager.enabled=false (cross-cluster mode). Set it to the Route53 PHZ hostname or IP of the remote Wazuh manager." }}
+{{- end }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -76,6 +79,13 @@ spec:
             - /bin/sh
             - -c
             - |
+              {{- if .Values.agent.externalManagerAddress }}
+              # Cross-cluster mode: use explicit external manager address (Route53 PHZ / static hostname)
+              echo "{{ .Values.agent.externalManagerAddress }}" > /shared/manager-ip
+              echo "Using external manager address: {{ .Values.agent.externalManagerAddress }}"
+              exit 0
+              {{- else }}
+              # Same-cluster mode: resolve manager via K8s service or DNS
               # Use Kubernetes auto-injected service env var (zero DNS queries)
               if [ -n "$MANAGER_SVC_HOST" ]; then
                 echo "$MANAGER_SVC_HOST" > /shared/manager-ip
@@ -101,6 +111,7 @@ spec:
               done
               echo "ERROR: Could not resolve manager after 20 attempts"
               exit 1
+              {{- end }}
           volumeMounts:
             - name: shared
               mountPath: /shared

@@ -2,7 +2,7 @@ apiVersion: v2
 name: wazuh
 description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO integration (optimized for EKS Auto Mode)
 type: application
-version: 1.2.2
+version: 1.2.4
 appVersion: "4.14.4"
 home: https://github.com/ileonelperea/wazuh-helm
 sources:
@@ -25,7 +25,17 @@ icon: https://wazuh.com/uploads/2022/05/WAZUH.png
 annotations:
   artifacthub.io/changes: |
     - kind: changed
-      description: "Move bootstrapToken inside vault.bootstrap section (breaking: vault.bootstrapToken → vault.bootstrap.bootstrapToken)"
+      description: "Credential rotation CronJob schedule changed to annually (0 2 1 1 *)"
+    - kind: added
+      description: "dashboard.ssl.enabled flag for optional HTTPS on dashboard server (default false)"
+    - kind: added
+      description: "indexer.enabled, manager.enabled, dashboard.enabled flags for agent-only deployments"
+    - kind: added
+      description: "agent.externalManagerAddress — cross-cluster support via Route53 PHZ or static hostname"
+    - kind: changed
+      description: "NetworkPolicy agent egress: podSelector for same-cluster, open ports for cross-cluster (manager.enabled=false)"
+    - kind: changed
+      description: "Certs and component secrets are now conditional on their respective component enabled flag"
     - kind: added
       description: "vault.readAdminPasswordFromVault flag — bootstrap job reads admin password from Vault KV"
     - kind: added

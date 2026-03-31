@@ -1,3 +1,4 @@
+{{- if .Values.indexer.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -235,6 +236,8 @@ spec:
                       - "indices:data/write/index"
                       - "indices:data/write/update"
                       - "indices:data/write/bulk"
+                      - "indices:data/write/bulk[s]"
+                      - "indices:data/write/bulk[n]"
                       - "indices:data/write/delete"
               EOF
 
@@ -432,3 +435,4 @@ spec:
         resources:
           requests:
             storage: {{ .Values.indexer.storage.size }}
+{{- end }}

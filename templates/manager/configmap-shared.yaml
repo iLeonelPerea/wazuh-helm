@@ -1,3 +1,4 @@
+{{- if .Values.manager.enabled }}
 {{- if .Values.agent.enabled }}
 apiVersion: v1
 kind: ConfigMap
@@ -112,4 +113,5 @@ data:
       </sca>
 
     </agent_config>
+{{- end }}
 {{- end }}

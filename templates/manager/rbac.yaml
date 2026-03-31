@@ -1,3 +1,4 @@
+{{- if .Values.manager.enabled }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -6,3 +7,4 @@ metadata:
   labels:
     {{- include "wazuh.labels" . | nindent 4 }}
     {{- include "wazuh.manager.selectorLabels" . | nindent 4 }}
+{{- end }}

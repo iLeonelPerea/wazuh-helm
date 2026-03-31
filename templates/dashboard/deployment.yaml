@@ -1,3 +1,4 @@
+{{- if .Values.dashboard.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -213,7 +214,7 @@ spec:
                   name: {{ include "wazuh.apiSecretName" . }}
                   key: password
             - name: SERVER_SSL_ENABLED
-              value: "false"
+              value: {{ (.Values.dashboard.ssl).enabled | default false | quote }}
           startupProbe:
             tcpSocket:
               port: dashboard
@@ -256,3 +257,4 @@ spec:
             secretName: {{ include "wazuh.fullname" . }}-dashboard-certs
         - name: wazuh-app-config
           emptyDir: {}
+{{- end }}

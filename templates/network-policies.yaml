@@ -18,6 +18,8 @@ spec:
     - Egress
   egress:
     # Allow agent -> manager (events + enrollment)
+    {{- if .Values.manager.enabled }}
+    # Same-cluster mode: egress to manager pods via podSelector
     - to:
         - podSelector:
             matchLabels:
@@ -27,7 +29,16 @@ spec:
           port: 1514
         - protocol: TCP
           port: 1515
-    # Allow DNS resolution
+    {{- else }}
+    # Cross-cluster mode: egress to external manager on ports 1514/1515
+    # Route53 PHZ hostname resolves within VPC via TGW
+    - ports:
+        - protocol: TCP
+          port: 1514
+        - protocol: TCP
+          port: 1515
+    {{- end }}
+    # Allow DNS resolution (needed for Route53 PHZ hostname resolution in cross-cluster)
     - ports:
         - protocol: UDP
           port: 53

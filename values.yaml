@@ -160,6 +160,8 @@ storageClass:
 # Indexer (Wazuh Indexer / OpenSearch)
 # =============================================================================
 indexer:
+  # -- Deploy Wazuh Indexer (OpenSearch). Set false for agent-only deployments.
+  enabled: true
   image:
     repository: wazuh/wazuh-indexer
     tag: "4.14.4"
@@ -198,6 +200,8 @@ indexer:
 # Manager (Wazuh Manager)
 # =============================================================================
 manager:
+  # -- Deploy Wazuh Manager. Set false for agent-only deployments.
+  enabled: true
   image:
     repository: wazuh/wazuh-manager
     tag: "4.14.4"
@@ -281,6 +285,8 @@ manager:
 # Dashboard (Wazuh Dashboard / OpenSearch Dashboards)
 # =============================================================================
 dashboard:
+  # -- Deploy Wazuh Dashboard. Set false for agent-only deployments.
+  enabled: true
   image:
     repository: wazuh/wazuh-dashboard
     tag: "4.14.4"
@@ -310,6 +316,11 @@ dashboard:
     #       hosts:
     #         - wazuh.example.com
     tls: []
+  # -- SSL/TLS on the dashboard server itself.
+  # Keep false when using Cloudflare Tunnel, Traefik, or any TLS-terminating proxy.
+  # Set true only for direct access without a proxy in front.
+  ssl:
+    enabled: false
   # -- Prometheus metrics scraping
   metrics:
     enabled: true
@@ -328,6 +339,12 @@ dashboard:
 agent:
   # -- Deploy Wazuh agents as a DaemonSet
   enabled: true
+  # -- External manager address for cross-cluster deployments (e.g., Route53 PHZ hostname).
+  # When set, agents connect to this address instead of the in-cluster manager service.
+  # Used when manager.enabled=false and agents point to a remote SIEM (e.g., kamet-internal).
+  # Example: "wazuh-manager.internal.kamet.mx"
+  # Leave empty ("") for same-cluster deployments.
+  externalManagerAddress: ""
   image:
     repository: wazuh/wazuh-agent
     tag: "4.14.4"

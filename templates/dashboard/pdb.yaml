@@ -1,3 +1,4 @@
+{{- if .Values.dashboard.enabled }}
 {{- if gt (int .Values.dashboard.replicas) 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -10,4 +11,5 @@ spec:
   selector:
     matchLabels:
       {{- include "wazuh.dashboard.selectorLabels" . | nindent 6 }}
+{{- end }}
 {{- end }}

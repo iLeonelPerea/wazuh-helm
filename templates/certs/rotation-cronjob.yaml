@@ -1,3 +1,4 @@
+{{- if or .Values.indexer.enabled .Values.manager.enabled }}
 {{- if .Values.certs.rotation.enabled }}
 apiVersion: batch/v1
 kind: CronJob
@@ -163,4 +164,5 @@ spec:
                   kubectl rollout restart statefulset "${FULLNAME}-manager" -n "$NAMESPACE"
                   kubectl rollout restart deployment "${FULLNAME}-dashboard" -n "$NAMESPACE"
                   echo "=== Rotation complete ==="
+{{- end }}
 {{- end }}

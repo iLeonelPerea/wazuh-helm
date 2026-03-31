@@ -1,3 +1,4 @@
+{{- if .Values.manager.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -26,3 +27,4 @@ spec:
       port: 55000
       targetPort: 55000
       protocol: TCP
+{{- end }}

@@ -1,3 +1,4 @@
+{{- if .Values.dashboard.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,7 +10,11 @@ data:
   opensearch_dashboards.yml: |
     server.host: "0.0.0.0"
     server.port: 5601
-    server.ssl.enabled: false
+    server.ssl.enabled: {{ (.Values.dashboard.ssl).enabled | default false }}
+    {{- if (.Values.dashboard.ssl).enabled }}
+    server.ssl.certificate: "/usr/share/wazuh-dashboard/certs/dashboard.pem"
+    server.ssl.key: "/usr/share/wazuh-dashboard/certs/dashboard-key.pem"
+    {{- end }}
     opensearch.hosts: ["https://{{ include "wazuh.indexer.host" . }}:9200"]
     opensearch.ssl.verificationMode: certificate
     opensearch.ssl.certificateAuthorities: ["/usr/share/wazuh-dashboard/certs/root-ca.pem"]
@@ -18,3 +23,4 @@ data:
     opensearch.requestHeadersAllowlist: ["securitytenant", "Authorization"]
     opensearch_security.multitenancy.enabled: false
     opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+{{- end }}
