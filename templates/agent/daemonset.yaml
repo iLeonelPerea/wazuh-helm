@@ -23,6 +23,8 @@ spec:
         {{- include "wazuh.labels" . | nindent 8 }}
         {{- include "wazuh.agent.selectorLabels" . | nindent 8 }}
     spec:
+      # Required for host-level monitoring: process inventory, rootcheck, FIM, log collection
+      # See values.yaml agent section for full security rationale
       hostPID: true
       {{- include "wazuh.dnsConfig" . | nindent 6 }}
       serviceAccountName: {{ include "wazuh.fullname" . }}-agent
@@ -92,15 +94,47 @@ spec:
                 echo "Resolved via env var: $MANAGER_SVC_HOST"
                 exit 0
               fi
-              # Fallback: wait for service with TCP check (no DNS)
+              # Fallback: hardened DNS resolution with multiple methods and validation
               echo "WARN: Service env var not available, waiting for DNS..."
               SVC="{{ include "wazuh.manager.agents.fqdn" . }}"
               BACKOFF=3
+
+              # Helper function to validate IP address format
+              validate_ip() {
+                local ip="$1"
+                echo "$ip" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+              }
+
+              # Helper function to resolve IP using multiple methods
+              resolve_ip() {
+                local hostname="$1"
+                local ip=""
+
+                # Method 1: getent hosts (preferred - simple, consistent format)
+                ip=$(getent hosts "$hostname" 2>/dev/null | awk '{print $1; exit}')
+                if [ -n "$ip" ] && validate_ip "$ip"; then
+                  echo "$ip"
+                  return 0
+                fi
+
+                # Method 2: nslookup fallback (for minimal containers without getent)
+                if command -v nslookup >/dev/null 2>&1; then
+                  ip=$(nslookup "$hostname" 2>/dev/null | grep -A1 "^Name:" | grep "Address:" | tail -1 | awk '{print $2}')
+                  if [ -n "$ip" ] && validate_ip "$ip"; then
+                    echo "$ip"
+                    return 0
+                  fi
+                fi
+
+                # No valid IP could be resolved
+                return 1
+              }
+
               for i in $(seq 1 20); do
-                MANAGER_IP=$(getent hosts "$SVC" 2>/dev/null | awk '{print $1; exit}')
+                MANAGER_IP=$(resolve_ip "$SVC")
                 if [ -n "$MANAGER_IP" ]; then
                   echo "$MANAGER_IP" > /shared/manager-ip
-                  echo "Resolved via DNS: $MANAGER_IP (attempt $i)"
+                  echo "Resolved manager IP: $MANAGER_IP (attempt $i)"
                   exit 0
                 fi
                 echo "Attempt $i/20: waiting ${BACKOFF}s..."
@@ -109,8 +143,12 @@ spec:
                 BACKOFF=$((BACKOFF + (BACKOFF / 2 + 1)))
                 [ $BACKOFF -gt 30 ] && BACKOFF=30
               done
-              echo "ERROR: Could not resolve manager after 20 attempts"
-              exit 1
+
+              # Final fallback: use FQDN directly, let Wazuh agent handle DNS resolution at runtime
+              echo "WARN: Could not resolve manager IP after 20 attempts, using FQDN for runtime resolution"
+              echo "$SVC" > /shared/manager-ip
+              echo "Manager address will be resolved at agent startup: $SVC"
+              exit 0
               {{- end }}
           volumeMounts:
             - name: shared

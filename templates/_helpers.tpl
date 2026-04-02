@@ -165,3 +165,29 @@ Vault ESO ServiceAccount name
 default
 {{- end -}}
 {{- end }}
+
+{{/*
+Generate podAntiAffinity based on preset (soft/hard)
+Usage: {{ include "wazuh.podAntiAffinity" (list "component-name" "soft-or-hard") }}
+*/}}
+{{- define "wazuh.podAntiAffinity" -}}
+{{- $component := index . 0 -}}
+{{- $preset := index . 1 -}}
+{{- if eq $preset "soft" }}
+podAntiAffinity:
+  preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: {{ $component }}
+        topologyKey: kubernetes.io/hostname
+{{- else if eq $preset "hard" }}
+podAntiAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: {{ $component }}
+      topologyKey: kubernetes.io/hostname
+{{- end }}
+{{- end }}

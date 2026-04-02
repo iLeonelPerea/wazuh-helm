@@ -27,7 +27,12 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/indexer/configmap.yaml") . | sha256sum }}
         checksum/passwords: {{ printf "%s-%s-%s" .Values.security.adminPassword (include "wazuh.kibanaserverPassword" .) (include "wazuh.filebeatPassword" .) | sha256sum }}
-        {{- if .Values.indexer.metrics.enabled }}
+        {{- if .Values.indexer.exporter.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.indexer.exporter.port | quote }}
+        prometheus.io/path: "/metrics"
+        prometheus.io/scheme: "http"
+        {{- else if .Values.indexer.metrics.enabled }}
         prometheus.io/scrape: "true"
         prometheus.io/port: {{ .Values.indexer.metrics.port | quote }}
         prometheus.io/path: {{ .Values.indexer.metrics.path | quote }}
@@ -46,9 +51,12 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.indexer.affinity }}
+      {{- if .Values.indexer.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.indexer.affinity | nindent 8 }}
+      {{- else if .Values.indexer.antiAffinityPreset }}
+      affinity:
+        {{- include "wazuh.podAntiAffinity" (list "indexer" .Values.indexer.antiAffinityPreset) | nindent 8 }}
       {{- end }}
       {{- with .Values.indexer.tolerations }}
       tolerations:
@@ -375,6 +383,31 @@ spec:
                           }' > /dev/null 2>&1
                         echo "Namespace enrichment pipeline created."
                         {{- end }}
+                        # Force replicas=1 for monitoring/statistics indices (prevents UNASSIGNED shards after rolling update)
+                        {{- if gt (int .Values.indexer.replicas) 1 }}
+                        echo "Creating index template to force replicas=1 for monitoring/statistics indices..."
+                        for i in $(seq 1 30); do
+                          if curl -s -k --cert /usr/share/wazuh-indexer/config/certs/admin.pem \
+                            --key /usr/share/wazuh-indexer/config/certs/admin-key.pem \
+                            --cacert /usr/share/wazuh-indexer/config/certs/root-ca.pem \
+                            -X PUT "https://localhost:9200/_index_template/wazuh-monitoring-replicas" \
+                            -H 'Content-Type: application/json' \
+                            -d '{
+                              "index_patterns": ["wazuh-monitoring-*", "wazuh-statistics-*"],
+                              "priority": 1,
+                              "template": {
+                                "settings": {
+                                  "number_of_replicas": 1
+                                }
+                              }
+                            }' 2>/dev/null | grep -q '"acknowledged":true'; then
+                            echo "Index template wazuh-monitoring-replicas created successfully"
+                            break
+                          fi
+                          echo "Attempt $i/30 - waiting for indexer to accept index template..."
+                          sleep 10
+                        done
+                        {{- end }}
                         exit 0
                       fi
                       sleep 5
@@ -391,13 +424,19 @@ spec:
                 - /bin/bash
                 - -c
                 - |
-                  curl -s -k --cert /usr/share/wazuh-indexer/config/certs/admin.pem \
+                  # Check that this indexer node responds to HTTP requests (node-level health)
+                  # We accept any cluster color (green/yellow/red) because RED means UNASSIGNED
+                  # shards — a cluster-level issue, not a node-level issue
+                  HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -k \
+                    --cert /usr/share/wazuh-indexer/config/certs/admin.pem \
                     --key /usr/share/wazuh-indexer/config/certs/admin-key.pem \
                     --cacert /usr/share/wazuh-indexer/config/certs/root-ca.pem \
-                    https://localhost:9200/_cluster/health | grep -qE '"status":"(green|yellow)"'
+                    'https://localhost:9200/_cluster/health')
+                  [ "$HTTP_CODE" -eq 200 ]
             initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 10
+            failureThreshold: 3
           livenessProbe:
             tcpSocket:
               port: indexer-rest
@@ -417,6 +456,55 @@ spec:
               readOnly: true
             - name: security-config
               mountPath: /usr/share/wazuh-indexer/config/opensearch-security
+        {{- if .Values.indexer.exporter.enabled }}
+        - name: opensearch-exporter
+          image: "{{ .Values.indexer.exporter.image.repository }}:{{ .Values.indexer.exporter.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.indexer.exporter.port }}
+              protocol: TCP
+          args:
+            - "--es.uri=https://localhost:9200"
+            - "--es.ssl-skip-verify"
+            - "--es.all"
+            - "--es.indices"
+            - "--es.shards"
+            - "--web.listen-address=:{{ .Values.indexer.exporter.port }}"
+            - "--web.telemetry-path=/metrics"
+            # Use admin certs for authentication
+            - "--es.ca=/usr/share/wazuh-indexer/config/certs/root-ca.pem"
+            - "--es.client-cert=/usr/share/wazuh-indexer/config/certs/admin.pem"
+            - "--es.client-private-key=/usr/share/wazuh-indexer/config/certs/admin-key.pem"
+          volumeMounts:
+            - name: indexer-certs
+              mountPath: /usr/share/wazuh-indexer/config/certs
+              readOnly: true
+          resources:
+            {{- toYaml .Values.indexer.exporter.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 10
+        {{- end }}
       volumes:
         - name: indexer-config
           configMap:

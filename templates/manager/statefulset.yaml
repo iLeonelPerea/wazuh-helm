@@ -42,9 +42,12 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.manager.affinity }}
+      {{- if .Values.manager.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.manager.affinity | nindent 8 }}
+      {{- else if .Values.manager.antiAffinityPreset }}
+      affinity:
+        {{- include "wazuh.podAntiAffinity" (list "manager" .Values.manager.antiAffinityPreset) | nindent 8 }}
       {{- end }}
       {{- with .Values.manager.tolerations }}
       tolerations:
@@ -362,17 +365,26 @@ spec:
               MAX_FAILURES=10
               while true; do
                 if [ -d /var/ossec/logs/archives ]; then
-                  if aws s3 sync /var/ossec/logs/archives/ s3://{{ .Values.s3.bucket }}/archives/ \
+                  SYNC_OUTPUT=$(aws s3 sync /var/ossec/logs/archives/ s3://{{ .Values.s3.bucket }}/archives/ \
                     --exclude "*.tmp" --exclude "*.lock" \
-                    --region {{ .Values.s3.region }} --quiet 2>&1; then
-                    echo "$(date) - Sync completed"
+                    --region {{ .Values.s3.region }} --quiet 2>&1)
+                  SYNC_EXIT=$?
+                  if [ $SYNC_EXIT -eq 0 ]; then
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] S3 sync completed successfully"
                     FAIL_COUNT=0
                   else
-                    FAIL_COUNT=$((FAIL_COUNT + 1))
-                    echo "$(date) - Sync FAILED ($FAIL_COUNT/$MAX_FAILURES)"
-                    if [ $FAIL_COUNT -ge $MAX_FAILURES ]; then
-                      echo "$(date) - FATAL: $MAX_FAILURES consecutive failures, exiting"
-                      exit 1
+                    if echo "$SYNC_OUTPUT" | grep -qiE 'ExpiredToken|InvalidAccessKeyId|RequestTimeTooSkewed|TokenRefreshRequired|credentials'; then
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] IAM credentials expired/invalid — waiting for Pod Identity refresh (not counting as failure)"
+                      sleep 30
+                      continue
+                    else
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] S3 sync error: $SYNC_OUTPUT"
+                      FAIL_COUNT=$((FAIL_COUNT + 1))
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sync FAILED ($FAIL_COUNT/$MAX_FAILURES)"
+                      if [ $FAIL_COUNT -ge $MAX_FAILURES ]; then
+                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] FATAL: $MAX_FAILURES consecutive failures, exiting"
+                        exit 1
+                      fi
                     fi
                   fi
                 fi
