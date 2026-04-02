@@ -88,7 +88,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.474327679Z"
+    created: "2026-04-02T21:25:12.843098499Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 3ec5688bd4f273a8ca0bdc87965603667fc8acacacd233d646d5e0a6ee404201
@@ -198,7 +198,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.47231797Z"
+    created: "2026-04-02T21:25:12.840910534Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 109f7f4fd8e808c028aaa4b438f9c0b6be2f4da39292d56a8cd9a10375b3d28a
@@ -298,7 +298,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.469475971Z"
+    created: "2026-04-02T21:25:12.838618214Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: c357e8d5eb8e95544df1c32f186239143a8cce1c8e212d680a9ead9f55e6c2a5
@@ -398,7 +398,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.46749727Z"
+    created: "2026-04-02T21:25:12.836060812Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 98a7b50c964eec8065ded3aae7f463b78cfb24c01034e78cdb44e5a325ab8b1e
@@ -490,7 +490,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.46550333Z"
+    created: "2026-04-02T21:25:12.833986846Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 5684da69df9faa02e7ac015f68d6a745caf7d37ed4b170f10fb33219d540cb3f
@@ -558,7 +558,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.462520811Z"
+    created: "2026-04-02T21:25:12.831804189Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c8f9e8a90cb08d7070c3cb658a0cebbf9a95e27d6ac56c1222dcbc7849b47a0a
@@ -623,7 +623,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.460796174Z"
+    created: "2026-04-02T21:25:12.829380124Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 93756ed933e775425a93a7aeebd2d6c30fe608fb397b8e4fac0d9d5655b46382
@@ -690,7 +690,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.459162156Z"
+    created: "2026-04-02T21:25:12.827719419Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c9ee608c221842e31bc8aecb0bb36cbaa7add99c8fcc9d840db6d35f732a3ab9
@@ -719,7 +719,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.456931617Z"
+    created: "2026-04-02T21:25:12.826175646Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
@@ -748,7 +748,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-02T20:58:38.455383269Z"
+    created: "2026-04-02T21:25:12.82414214Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
@@ -775,4 +775,4 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-02T20:58:38.454020076Z"
+generated: "2026-04-02T21:25:12.822396529Z"
