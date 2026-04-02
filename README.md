@@ -78,13 +78,14 @@ kubectl port-forward svc/wazuh-dashboard 5601:5601 -n wazuh
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `security.adminPassword` | Admin password (the only one you need to set) | `"SecurePassword123!"` |
+| `security.adminPassword` | Admin password — **required** when `vault.enabled=false` | `"SecurePassword123!"` |
 | `security.existingSecrets.indexer` | Use existing Secret for indexer credentials | `""` |
 | `security.existingSecrets.api` | Use existing Secret for API credentials | `""` |
 | `security.existingSecrets.dashboard` | Use existing Secret for dashboard credentials | `""` |
 | `security.existingSecrets.filebeat` | Use existing Secret for filebeat credentials | `""` |
 
 > Internal passwords (kibanaserver, filebeat, API) are derived deterministically from `adminPassword` using SHA-256. You never need to set them manually.
+> When `vault.enabled=true` and `vault.readAdminPasswordFromVault=true`, `adminPassword` is not required — the chart reads the password directly from Vault KV.
 
 ### Indexer
 
@@ -117,8 +118,17 @@ kubectl port-forward svc/wazuh-dashboard 5601:5601 -n wazuh
 | `dashboard.replicas` | Number of dashboard replicas | `1` |
 | `dashboard.ingress.enabled` | Enable Ingress for external access | `false` |
 | `dashboard.ingress.host` | Dashboard hostname | `"wazuh.example.com"` |
+| `dashboard.service.annotations` | Annotations on the dashboard Service (ExternalDNS, AWS LB Controller, etc.) | `{}` |
 | `dashboard.nodeSelector` | Node selector for dedicated nodes | `{}` |
 | `dashboard.tolerations` | Tolerations for tainted nodes | `[]` |
+
+**ExternalDNS example:**
+```yaml
+dashboard:
+  service:
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: wazuh.example.com
+```
 
 ### Agent
 
@@ -218,6 +228,76 @@ dashboard:
       effect: NoSchedule
 # Agents do NOT get nodeSelector — they run on all nodes
 ```
+
+### Vault Integration
+
+The chart supports three credential management modes:
+
+**Mode 1 — No Vault (default, simplest)**
+Set `security.adminPassword` and all secrets are created as Kubernetes Secrets automatically.
+
+**Mode 2 — Vault bootstrap (first install)**
+```yaml
+vault:
+  enabled: true
+  address: "http://vault.vault.svc.cluster.local:8200"
+  bootstrap:
+    enabled: true
+    bootstrapToken: "<your-vault-root-or-admin-token>"
+security:
+  adminPassword: "YourSecurePassword123!"
+```
+The pre-install Job seeds the password into Vault KV and configures Kubernetes auth. After this, set `bootstrap.enabled: false` and remove `adminPassword` from your values.
+
+**Mode 3 — Vault post-bootstrap (subsequent upgrades)**
+```yaml
+vault:
+  enabled: true
+  address: "http://vault.vault.svc.cluster.local:8200"
+  readAdminPasswordFromVault: true  # password comes from Vault KV, not values
+  bootstrap:
+    enabled: false
+```
+No credentials in your values file. ESO syncs all secrets from Vault automatically.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `vault.enabled` | Enable Vault + ESO integration | `false` |
+| `vault.address` | Vault server address | `""` |
+| `vault.readAdminPasswordFromVault` | Read admin password from Vault KV instead of values | `false` |
+| `vault.bootstrap.enabled` | Run bootstrap Job on install/upgrade | `false` |
+| `vault.bootstrap.bootstrapToken` | Token used to configure Vault (required when bootstrap.enabled=true) | `""` |
+| `vault.role` | Vault Kubernetes auth role | `"wazuh"` |
+| `vault.mount` | Vault KV v2 mount path | `"wazuh"` |
+| `vault.refreshInterval` | ESO secret refresh interval | `"1h"` |
+
+### Prometheus Metrics
+
+The chart includes an optional [OpenSearch Exporter](https://github.com/prometheus-community/elasticsearch_exporter) sidecar on each indexer pod.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `indexer.exporter.enabled` | Enable Prometheus OpenSearch exporter sidecar | `false` |
+| `networkPolicy.prometheusNamespace` | Namespace of Prometheus (restricts scraping NetworkPolicy) | `""` |
+
+```yaml
+indexer:
+  exporter:
+    enabled: true
+
+networkPolicy:
+  enabled: true
+  prometheusNamespace: "monitoring"  # leave empty to allow scraping from any namespace
+```
+
+Metrics are exposed on `:9108/metrics` with certificate-based auth to OpenSearch.
+
+### Network Policies
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `networkPolicy.enabled` | Enable Kubernetes NetworkPolicies for all components | `false` |
+| `networkPolicy.prometheusNamespace` | Namespace label for Prometheus scraping (empty = allow all) | `""` |
 
 ## EKS Auto Mode Notes
 
