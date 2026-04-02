@@ -182,8 +182,15 @@ indexer:
     storageClass: gp3
     # -- Indexer data volume size
     size: 10Gi
-  # -- Termination grace period in seconds
+  # -- Termination grace period in seconds (allows OpenSearch to migrate shards before pod dies)
   terminationGracePeriodSeconds: 120
+  # -- Drift detection CronJob: periodically re-applies the index template and patches replica
+  # settings on existing monitoring/statistics indices. Only runs when indexer.replicas > 1.
+  driftDetection:
+    # -- Enable the drift detection CronJob
+    enabled: true
+    # -- Cron schedule for drift detection (default: every 6 hours)
+    schedule: "0 */6 * * *"
   # -- Prometheus metrics scraping
   metrics:
     enabled: true

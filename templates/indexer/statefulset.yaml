@@ -408,6 +408,27 @@ spec:
                           sleep 10
                         done
                         {{- end }}
+                        {{- if gt (int .Values.indexer.replicas) 1 }}
+                        # Patch EXISTING monitoring/statistics indices to replicas=1
+                        # Prevents UNASSIGNED shards on indices created before this template existed
+                        echo "[$(date)] Patching existing monitoring/statistics indices to replicas=1..."
+                        for idx_pattern in "wazuh-monitoring-*" "wazuh-statistics-*"; do
+                          PATCH_RESPONSE=$(curl -s -k \
+                            --cert /usr/share/wazuh-indexer/config/certs/admin.pem \
+                            --key /usr/share/wazuh-indexer/config/certs/admin-key.pem \
+                            --cacert /usr/share/wazuh-indexer/config/certs/root-ca.pem \
+                            -X PUT "https://localhost:9200/$idx_pattern/_settings" \
+                            -H "Content-Type: application/json" \
+                            -d '{"index": {"number_of_replicas": 1}}' 2>/dev/null)
+                          if echo "$PATCH_RESPONSE" | grep -q '"type":"index_not_found_exception"'; then
+                            echo "[$(date)] $idx_pattern: no existing indices (OK, template covers new ones)"
+                          elif echo "$PATCH_RESPONSE" | grep -q '"error"'; then
+                            echo "[$(date)] WARNING: patch failed for $idx_pattern: $(echo "$PATCH_RESPONSE" | head -c 200)"
+                          else
+                            echo "[$(date)] $idx_pattern: patched to replicas=1"
+                          fi
+                        done
+                        {{- end }}
                         exit 0
                       fi
                       sleep 5
