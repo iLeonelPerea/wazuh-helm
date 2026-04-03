@@ -3,6 +3,12 @@ entries:
   wazuh:
   - annotations:
       artifacthub.io/changes: |
+        - kind: fixed
+          description: "Watchdog: stuckThresholdSeconds raised 180→600s to allow OpenSearch full startup time before force-delete (prevents false-positive loop during normal startup)"
+        - kind: fixed
+          description: "Watchdog: race condition detection now checks containerID empty (true race) vs started=false (normal startup probe pending) — eliminates false positives while maintaining auto-heal for real containerd failures"
+        - kind: fixed
+          description: "CronJob manager-cleanup and indexer-drift-detection: added nodeSelector workload=wazuh + toleration to ensure pods land on wazuh node pool (not general-purpose nodes)"
         - kind: added
           description: "Watchdog CronJob (every 5 min): auto-heals pods stuck in PodInitializing (EKS Auto Mode containerd race condition) and removes wazuh-monitoring-*/wazuh-statistics-* indices with UNASSIGNED shards (NODE_LEFT) after rolling updates"
         - kind: security
@@ -98,7 +104,131 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.935546184Z"
+    created: "2026-04-03T04:45:13.727966064Z"
+    description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
+      integration (optimized for EKS Auto Mode)
+    digest: e595bf43ab11db3d92b2fde8029c4f5c662e927f748eb4c2adc669d7328c2723
+    home: https://github.com/ileonelperea/wazuh-helm
+    icon: https://wazuh.com/uploads/2022/05/WAZUH.png
+    keywords:
+    - wazuh
+    - siem
+    - security
+    - monitoring
+    - opensearch
+    - eks
+    - kubernetes
+    - threat-detection
+    - vulnerability-detection
+    maintainers:
+    - name: ileonelperea
+      url: https://github.com/ileonelperea
+    name: wazuh
+    sources:
+    - https://github.com/ileonelperea/wazuh-helm
+    - https://documentation.wazuh.com/
+    type: application
+    urls:
+    - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-1.2.8.tgz
+    version: 1.2.8
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: "Watchdog CronJob (every 5 min): auto-heals pods stuck in PodInitializing (EKS Auto Mode containerd race condition) and removes wazuh-monitoring-*/wazuh-statistics-* indices with UNASSIGNED shards (NODE_LEFT) after rolling updates"
+        - kind: security
+          description: "cleanup RBAC: added delete verb on pods to support watchdog force-delete of stuck pods"
+        - kind: fixed
+          description: "Self-healing rolling upgrades: postStart hook now patches existing wazuh-monitoring-* and wazuh-statistics-* indices to replicas=1, preventing UNASSIGNED shards after indexer rolling restart"
+        - kind: added
+          description: "indexer.driftDetection CronJob: periodically re-applies index template and repairs replica settings on monitoring/statistics indices (runs every 6h, gated by replicas > 1)"
+        - kind: fixed
+          description: "Readiness probe uses HTTP 200 instead of cluster health color — pods remain Ready even when cluster is temporarily RED during rolling update"
+        - kind: added
+          description: "dashboard.service.annotations — support for ExternalDNS and AWS LB Controller annotations on dashboard Service"
+        - kind: security
+          description: ".helmignore hardened: excludes vault-root-token*.json, values-*.yaml env files, internal docs, NodePool manifest, scripts/"
+        - kind: changed
+          description: "Credential rotation CronJob schedule changed to annually (0 2 1 1 *)"
+        - kind: added
+          description: "dashboard.ssl.enabled flag for optional HTTPS on dashboard server (default false)"
+        - kind: added
+          description: "indexer.enabled, manager.enabled, dashboard.enabled flags for agent-only deployments"
+        - kind: added
+          description: "agent.externalManagerAddress — cross-cluster support via Route53 PHZ or static hostname"
+        - kind: changed
+          description: "NetworkPolicy agent egress: podSelector for same-cluster, open ports for cross-cluster (manager.enabled=false)"
+        - kind: changed
+          description: "Certs and component secrets are now conditional on their respective component enabled flag"
+        - kind: added
+          description: "vault.readAdminPasswordFromVault flag — bootstrap job reads admin password from Vault KV"
+        - kind: added
+          description: "Credential rotation CronJob with Vault mode reads adminPassword from Vault"
+        - kind: security
+          description: "Bootstrap job conditional — disabled after first install eliminates need for persistent high-privilege tokens"
+        - kind: added
+          description: "External Secrets Operator (ESO) integration with ClusterSecretStore for Vault"
+        - kind: added
+          description: "4 ExternalSecret resources (indexer, api, dashboard, filebeat credentials)"
+        - kind: added
+          description: "Vault bootstrap job auto-configures KV v2, K8s auth, policy, role"
+        - kind: added
+          description: "vault.bootstrap section with image, tag, resources configuration"
+        - kind: added
+          description: "vault.serviceAccount, vault.refreshInterval, vault.deletionPolicy for ESO"
+        - kind: changed
+          description: "vault section replaces Agent Injector (vault-bridge) with ESO workflow"
+        - kind: removed
+          description: "vault.agentResources removed (replaced by bootstrap.resources)"
+        - kind: removed
+          description: "Vault Agent Injector integration (vault-bridge) superseded by ESO"
+        - kind: fixed
+          description: "Remove artifacthub.io/signKey empty annotation that silently blocked version tracking"
+        - kind: added
+          description: "ADR-001: ArgoCD vs Standalone Helm for stateful workloads"
+        - kind: security
+          description: "seccompProfile RuntimeDefault on all pods"
+        - kind: security
+          description: "Drop ALL capabilities on every container with minimal per-component adds"
+        - kind: security
+          description: "allowPrivilegeEscalation false on all containers"
+        - kind: security
+          description: "wazuh.yml chmod 640 prevents duplicate hosts key crash"
+        - kind: security
+          description: "Bootstrap secrets mounted as files instead of env vars (prevents kubectl describe exposure)"
+        - kind: security
+          description: "Conditional TLS verification in bootstrap job based on vault.tlsSkipVerify"
+        - kind: security
+          description: "Bootstrap secrets auto-cleaned after hook completion (hook-delete-policy)"
+        - kind: security
+          description: "Rotation RBAC scoped to vault namespace only (no cluster-wide pods/exec)"
+        - kind: added
+          description: "Credential rotation CronJob with Vault mode and ESO force-sync"
+        - kind: added
+          description: "Active ESO polling replaces blind sleep during credential rotation"
+        - kind: added
+          description: "Ordered startup via init containers (Indexer → Manager → Dashboard)"
+        - kind: added
+          description: "wait-for-indexer init container on Manager (TCP 9200)"
+        - kind: added
+          description: "wait-for-dependencies init container on Dashboard (TCP 9200 + 55000)"
+        - kind: added
+          description: "kibana_wazuh_access role and mapping for dashboard index access"
+        - kind: added
+          description: "Rebuild index script for Helm repository recovery"
+        - kind: changed
+          description: "Agents use native Wazuh retry instead of init container wait"
+        - kind: changed
+          description: "Manager readiness probe initialDelaySeconds 30 to 45"
+        - kind: changed
+          description: "Release workflow regenerates index.yaml from scratch (no merge)"
+        - kind: fixed
+          description: "serviceAccountName fallback for dashboard/indexer when Vault disabled"
+        - kind: fixed
+          description: "Template permissions added to manage_wazuh_index role"
+      artifacthub.io/license: MIT
+    apiVersion: v2
+    appVersion: 4.14.4
+    created: "2026-04-03T04:45:13.724258814Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: d8c71456cb8824820a23e5711b7c3947921eeccb1e52101592a20decf0aade50
@@ -218,7 +348,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.932974019Z"
+    created: "2026-04-03T04:45:13.720324252Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: f2215b79852dc0a9f2a44e693d2de24a8888210479e4371c07aefe5cb93ee72c
@@ -332,7 +462,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.930437455Z"
+    created: "2026-04-03T04:45:13.717908051Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 3ec5688bd4f273a8ca0bdc87965603667fc8acacacd233d646d5e0a6ee404201
@@ -442,7 +572,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.928409916Z"
+    created: "2026-04-03T04:45:13.7158717Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 109f7f4fd8e808c028aaa4b438f9c0b6be2f4da39292d56a8cd9a10375b3d28a
@@ -542,7 +672,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.925614502Z"
+    created: "2026-04-03T04:45:13.712987636Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: c357e8d5eb8e95544df1c32f186239143a8cce1c8e212d680a9ead9f55e6c2a5
@@ -642,7 +772,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.923673714Z"
+    created: "2026-04-03T04:45:13.711058645Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 98a7b50c964eec8065ded3aae7f463b78cfb24c01034e78cdb44e5a325ab8b1e
@@ -734,7 +864,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.92166474Z"
+    created: "2026-04-03T04:45:13.709138761Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 5684da69df9faa02e7ac015f68d6a745caf7d37ed4b170f10fb33219d540cb3f
@@ -802,7 +932,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.919145268Z"
+    created: "2026-04-03T04:45:13.706554243Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c8f9e8a90cb08d7070c3cb658a0cebbf9a95e27d6ac56c1222dcbc7849b47a0a
@@ -867,7 +997,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.917126325Z"
+    created: "2026-04-03T04:45:13.70478481Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 93756ed933e775425a93a7aeebd2d6c30fe608fb397b8e4fac0d9d5655b46382
@@ -934,7 +1064,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.915464526Z"
+    created: "2026-04-03T04:45:13.703200853Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c9ee608c221842e31bc8aecb0bb36cbaa7add99c8fcc9d840db6d35f732a3ab9
@@ -963,7 +1093,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.913964538Z"
+    created: "2026-04-03T04:45:13.701757639Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
@@ -992,7 +1122,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T01:43:12.91173372Z"
+    created: "2026-04-03T04:45:13.700260344Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
@@ -1019,4 +1149,4 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-03T01:43:12.910219004Z"
+generated: "2026-04-03T04:45:13.698023629Z"
