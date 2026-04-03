@@ -16,6 +16,12 @@ spec:
         spec:
           restartPolicy: OnFailure
           serviceAccountName: {{ include "wazuh.fullname" . }}-cleanup
+          nodeSelector:
+            workload: wazuh
+          tolerations:
+            - key: workload
+              value: wazuh
+              effect: NoSchedule
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000

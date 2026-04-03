@@ -63,9 +63,11 @@ spec:
                   echo "[$(date -u +%H:%M:%SZ)] === Wazuh Watchdog — namespace=$NS threshold=${THRESHOLD}s ==="
 
                   # =========================================================
-                  # FASE 1: Pods atascados en PodInitializing
-                  # Race condition conocida de containerd en EKS Auto Mode:
-                  # init containers completan pero main container no arranca.
+                  # FASE 1: Pods con race condition real de containerd
+                  # Síntoma: init containers OK pero containerID vacío (containerd
+                  # nunca creó el main container). Distinto de arranque normal
+                  # donde containerID existe pero started=false (startup probe
+                  # pendiente — OpenSearch tarda 3-5min en arrancar).
                   # Fix: force-delete — StatefulSet recrea el pod limpiamente.
                   # =========================================================
                   echo "[$(date -u +%H:%M:%SZ)] Fase 1: buscando pods stuck en PodInitializing..."
@@ -82,11 +84,19 @@ spec:
                       2>/dev/null || echo "")
                     [ "$INIT_EXIT" != "0" ] && continue
 
-                    # ¿El main container aún NO ha arrancado?
+                    # ¿El main container aún NO ha arrancado (started=true)?
                     STARTED=$(kubectl get pod "$POD_NAME" -n "$NS" \
                       -o jsonpath='{.status.containerStatuses[0].started}' \
                       2>/dev/null || echo "")
                     [ "$STARTED" = "true" ] && continue
+
+                    # ¿containerd creó el container? (containerID no vacío = OpenSearch arrancando normalmente)
+                    # Si containerID existe, el container SÍ fue creado — solo está esperando startup probe.
+                    # Solo intervenimos cuando containerID está vacío: race condition real de containerd.
+                    CONTAINER_ID=$(kubectl get pod "$POD_NAME" -n "$NS" \
+                      -o jsonpath='{.status.containerStatuses[0].containerID}' \
+                      2>/dev/null || echo "")
+                    [ -n "$CONTAINER_ID" ] && continue
 
                     # ¿Cuánto lleva en este estado?
                     START_TIME=$(kubectl get pod "$POD_NAME" -n "$NS" \

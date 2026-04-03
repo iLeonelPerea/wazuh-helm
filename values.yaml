@@ -201,8 +201,10 @@ indexer:
     enabled: true
     # -- Cron schedule (default: every 5 minutes)
     schedule: "*/5 * * * *"
-    # -- Seconds a pod must be stuck in PodInitializing before force-delete (default: 3 minutes)
-    stuckThresholdSeconds: 180
+    # -- Seconds a pod must be stuck in PodInitializing before force-delete (default: 10 minutes)
+    # Must be > init_containers (~80s) + containerd_lag (~150s) + OpenSearch_startup (~3-5min)
+    # Only triggers when containerID is empty (true race condition, not normal startup)
+    stuckThresholdSeconds: 600
   # -- Prometheus metrics scraping
   metrics:
     enabled: true
