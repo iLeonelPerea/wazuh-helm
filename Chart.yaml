@@ -2,7 +2,7 @@ apiVersion: v2
 name: wazuh
 description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO integration (optimized for EKS Auto Mode)
 type: application
-version: 1.2.6
+version: 1.2.7
 appVersion: "4.14.4"
 home: https://github.com/ileonelperea/wazuh-helm
 sources:
@@ -24,6 +24,10 @@ keywords:
 icon: https://wazuh.com/uploads/2022/05/WAZUH.png
 annotations:
   artifacthub.io/changes: |
+    - kind: added
+      description: "Watchdog CronJob (every 5 min): auto-heals pods stuck in PodInitializing (EKS Auto Mode containerd race condition) and removes wazuh-monitoring-*/wazuh-statistics-* indices with UNASSIGNED shards (NODE_LEFT) after rolling updates"
+    - kind: security
+      description: "cleanup RBAC: added delete verb on pods to support watchdog force-delete of stuck pods"
     - kind: fixed
       description: "Self-healing rolling upgrades: postStart hook now patches existing wazuh-monitoring-* and wazuh-statistics-* indices to replicas=1, preventing UNASSIGNED shards after indexer rolling restart"
     - kind: added

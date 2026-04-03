@@ -191,6 +191,18 @@ indexer:
     enabled: true
     # -- Cron schedule for drift detection (default: every 6 hours)
     schedule: "0 */6 * * *"
+  # -- Watchdog CronJob: detects and auto-heals two known failure modes on EKS Auto Mode:
+  # 1) Pods stuck in PodInitializing due to containerd race condition (force-delete → StatefulSet recreates)
+  # 2) wazuh-monitoring-* and wazuh-statistics-* indices with UNASSIGNED shards (NODE_LEFT) after rolling
+  #    update of indexer pods — deletes the dead index so OpenSearch recreates it automatically.
+  # Runs every 5 minutes. Safe: only deletes monitoring/statistics indices, never wazuh-alerts-*.
+  watchdog:
+    # -- Enable the watchdog CronJob
+    enabled: true
+    # -- Cron schedule (default: every 5 minutes)
+    schedule: "*/5 * * * *"
+    # -- Seconds a pod must be stuck in PodInitializing before force-delete (default: 3 minutes)
+    stuckThresholdSeconds: 180
   # -- Prometheus metrics scraping
   metrics:
     enabled: true
