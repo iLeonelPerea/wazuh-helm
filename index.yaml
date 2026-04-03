@@ -108,7 +108,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.718356012Z"
+    created: "2026-04-03T14:09:31.84872917Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: d132e471b621bcef43a83bd24b391e6e7709bc546055052ca52929683391949d
@@ -238,7 +238,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.716154759Z"
+    created: "2026-04-03T14:09:31.845671611Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: e595bf43ab11db3d92b2fde8029c4f5c662e927f748eb4c2adc669d7328c2723
@@ -362,7 +362,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.713183627Z"
+    created: "2026-04-03T14:09:31.843438539Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: d8c71456cb8824820a23e5711b7c3947921eeccb1e52101592a20decf0aade50
@@ -482,7 +482,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.710948542Z"
+    created: "2026-04-03T14:09:31.84040748Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: f2215b79852dc0a9f2a44e693d2de24a8888210479e4371c07aefe5cb93ee72c
@@ -596,7 +596,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.708391693Z"
+    created: "2026-04-03T14:09:31.83812731Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 3ec5688bd4f273a8ca0bdc87965603667fc8acacacd233d646d5e0a6ee404201
@@ -706,7 +706,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.705294921Z"
+    created: "2026-04-03T14:09:31.836079383Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 109f7f4fd8e808c028aaa4b438f9c0b6be2f4da39292d56a8cd9a10375b3d28a
@@ -806,7 +806,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.703338594Z"
+    created: "2026-04-03T14:09:31.833413092Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: c357e8d5eb8e95544df1c32f186239143a8cce1c8e212d680a9ead9f55e6c2a5
@@ -906,7 +906,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.701350214Z"
+    created: "2026-04-03T14:09:31.831423494Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 98a7b50c964eec8065ded3aae7f463b78cfb24c01034e78cdb44e5a325ab8b1e
@@ -998,7 +998,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.698440718Z"
+    created: "2026-04-03T14:09:31.829500359Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes with Vault/ESO
       integration (optimized for EKS Auto Mode)
     digest: 5684da69df9faa02e7ac015f68d6a745caf7d37ed4b170f10fb33219d540cb3f
@@ -1066,7 +1066,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.696483599Z"
+    created: "2026-04-03T14:09:31.826961817Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c8f9e8a90cb08d7070c3cb658a0cebbf9a95e27d6ac56c1222dcbc7849b47a0a
@@ -1131,7 +1131,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.694760155Z"
+    created: "2026-04-03T14:09:31.825253954Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 93756ed933e775425a93a7aeebd2d6c30fe608fb397b8e4fac0d9d5655b46382
@@ -1198,7 +1198,7 @@ entries:
       artifacthub.io/signKey: ""
     apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.692291373Z"
+    created: "2026-04-03T14:09:31.823642431Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: c9ee608c221842e31bc8aecb0bb36cbaa7add99c8fcc9d840db6d35f732a3ab9
@@ -1227,7 +1227,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.690846707Z"
+    created: "2026-04-03T14:09:31.82221995Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: 62b898a1fb3a2dbbb695886ec3ce21f1b96376f692ba57a009c43cebc82abbd7
@@ -1256,7 +1256,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: 4.14.4
-    created: "2026-04-03T14:08:27.689419697Z"
+    created: "2026-04-03T14:09:31.819903686Z"
     description: Production-ready Wazuh SIEM deployment for Kubernetes (optimized
       for EKS Auto Mode)
     digest: d41b33641a32e32fb24e3811ca9ee466298b7ba506769a17834c7981edc64acf
@@ -1283,4 +1283,4 @@ entries:
     urls:
     - https://ileonelperea.github.io/wazuh-helm/charts/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-03T14:08:27.688073619Z"
+generated: "2026-04-03T14:09:31.818504469Z"
