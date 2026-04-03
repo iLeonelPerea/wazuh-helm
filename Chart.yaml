@@ -27,7 +27,7 @@ annotations:
     - kind: security
       description: "Bump global.initImages.kubectl tag 1.32 → 1.32.3-debian-12-r5 (immutable Bitnami tag, fixes 8 CRITICAL CVEs in init/CronJob containers)"
     - kind: added
-      description: "networkPolicy.crossClusterCidrs — list of VPC CIDRs allowed to reach the manager on ports 1514/1515 via Transit Gateway or VPC peering (enables cross-cluster agent deployments, e.g. kamet-prod → kamet-internal)"
+      description: "networkPolicy.crossClusterCidrs — list of VPC CIDRs allowed to reach the manager on ports 1514/1515 via Transit Gateway or VPC peering (enables cross-cluster agent deployments)"
     - kind: fixed
       description: "Watchdog: stuckThresholdSeconds raised 180→600s to allow OpenSearch full startup time before force-delete (prevents false-positive loop during normal startup)"
     - kind: fixed
