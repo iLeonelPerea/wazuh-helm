@@ -77,6 +77,17 @@ spec:
           port: 1514
         - protocol: TCP
           port: 1515
+    {{- range .Values.networkPolicy.crossClusterCidrs }}
+    # Allow cross-cluster agents from {{ . }} (via Transit Gateway / VPC peering)
+    - from:
+        - ipBlock:
+            cidr: {{ . }}
+      ports:
+        - protocol: TCP
+          port: 1514
+        - protocol: TCP
+          port: 1515
+    {{- end }}
     # Allow dashboard -> manager API
     - from:
         - podSelector:

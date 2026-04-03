@@ -15,7 +15,7 @@ global:
       tag: "1.36"
     kubectl:
       repository: public.ecr.aws/bitnami/kubectl
-      tag: "1.32"
+      tag: "1.32.3-debian-12-r5"
 
 # =============================================================================
 # Security & Credentials
@@ -498,6 +498,11 @@ networkPolicy:
   prometheusNamespace: ""
   # -- Additional egress rules for agents (e.g., to reach external APIs)
   extraEgress: []
+  # -- CIDRs allowed to send agent traffic (ports 1514/1515) to the manager from outside the cluster.
+  # Use for cross-cluster agent deployments via Transit Gateway or VPC peering.
+  # Each CIDR generates a separate ipBlock ingress rule on the manager NetworkPolicy.
+  # Example: ["10.2.0.0/16"] to allow kamet-prod agents via TGW.
+  crossClusterCidrs: []
 
 # =============================================================================
 # TLS Certificates
