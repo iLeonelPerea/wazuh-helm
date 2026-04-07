@@ -280,6 +280,12 @@ manager:
     key: ""
   # -- Days to keep rotated log files on disk (S3/Indexer retains full history)
   logRetentionDays: 7
+  # -- Annotations for the manager Service. Use for ExternalDNS (Route53 private zone).
+  # Example:
+  #   external-dns.alpha.kubernetes.io/hostname: manager.wazuh.kamet.internal
+  #   external-dns.alpha.kubernetes.io/provider: aws
+  service:
+    annotations: {}
   # -- Custom detection rules for monitored namespaces
   customRules:
     # -- Enable custom detection rules (5xx, 401, 403, 429, exceptions, DB errors, correlations)

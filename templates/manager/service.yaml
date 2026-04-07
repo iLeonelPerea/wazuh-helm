@@ -6,6 +6,10 @@ metadata:
   labels:
     {{- include "wazuh.labels" . | nindent 4 }}
     {{- include "wazuh.manager.selectorLabels" . | nindent 4 }}
+  {{- with .Values.manager.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   clusterIP: None
   selector:
